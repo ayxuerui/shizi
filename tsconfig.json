@@ -1,0 +1,9 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/character-data" },
+    { "path": "./packages/curriculum" },
+    { "path": "./packages/validator" },
+    { "path": "./packages/learner-state" }
+  ]
+}

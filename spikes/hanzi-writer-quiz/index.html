@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Spike: hanzi-writer quiz mode</title>
+    <script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.7/dist/hanzi-writer.min.js"></script>
+    <style>
+      body {
+        margin: 0;
+        font-family: -apple-system, system-ui, sans-serif;
+        background: #fafaf8;
+        color: #222;
+      }
+      header {
+        padding: 16px;
+        border-bottom: 1px solid #ddd;
+      }
+      header h1 {
+        font-size: 18px;
+        margin: 0 0 4px;
+      }
+      .instructions {
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      main {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        padding: 16px;
+        justify-content: center;
+      }
+      .card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid #ddd;
+        border-radius: 12px;
+        padding: 12px;
+        background: #fff;
+      }
+      .target {
+        width: 220px;
+        height: 220px;
+        border: 1px solid #eee;
+        border-radius: 8px;
+        touch-action: none;
+      }
+      .buttons {
+        display: flex;
+        gap: 8px;
+      }
+      button {
+        font-size: 14px;
+        padding: 8px 14px;
+        border-radius: 8px;
+        border: 1px solid #999;
+        background: #f4f4f4;
+      }
+      #log {
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        padding: 12px;
+        max-height: 25vh;
+        overflow-y: auto;
+        background: #111;
+        color: #cfffcf;
+        white-space: pre-wrap;
+        margin: 16px;
+        border-radius: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Spike — hanzi-writer quiz mode (library, not hand-rolled)</h1>
+      <div class="instructions">
+        <strong>Why this spike exists:</strong> the hand-rolled canvas spike
+        (<code>/pencil-input/</code>) hit a series of real bugs (hover
+        drawing, buttons-timing race, resize-clearing-canvas) and one still
+        unresolved. Rather than keep debugging throwaway code, this tests
+        the same real question — does Apple Pencil input work well, is palm
+        rejection OK, does fast/paused writing behave — through
+        <a href="https://github.com/chanind/hanzi-writer" target="_blank">hanzi-writer</a>,
+        a mature (MIT, 4.9k★, npm-published Sept 2025) library built on the
+        <em>same</em> Make Me a Hanzi data we already have license-cleared.
+        Its <code>quiz()</code> mode does stroke tracing with input handling
+        that's been in production for years — if this has the same bugs,
+        that's real information; if it doesn't, we just saved ourselves from
+        shipping hand-rolled code for something a library already solved.
+      </div>
+      <div class="instructions">
+        <strong>Try this, and tell me what happens:</strong>
+        <ol>
+          <li>Tap "Animate" on any card first, to see the stroke animation (this is the same capability as the <code>/stroke-animation/</code> spike, via the library).</li>
+          <li>Tap "Quiz", then trace each stroke with Apple Pencil, resting your palm on the screen as before. Any stray marks from palm contact?</li>
+          <li>Write the strokes fast, back-to-back, the way that broke the hand-rolled spike. Does every stroke register?</li>
+          <li>Pause between strokes, then continue. Does it still register correctly?</li>
+          <li>Note: mistake/hint feedback is deliberately visible in the log below (not on the character itself) for OUR testing purposes only. The design decision for the real product is to log fully but show a 4-year-old no visible correctness feedback — that's a config flag (<code>showHintAfterMisses: false</code>, already used below on the character itself), not a rebuild.</li>
+        </ol>
+      </div>
+    </header>
+    <main id="cards"></main>
+    <div id="log"></div>
+
+    <script>
+      const log = document.getElementById("log");
+      function logLine(text) {
+        log.textContent = `${text}\n${log.textContent}`.slice(0, 8000);
+      }
+
+      async function main() {
+        const data = await fetch("./data.json").then((r) => r.json());
+        const characters = Object.keys(data);
+        const cardsEl = document.getElementById("cards");
+
+        for (const char of characters) {
+          const card = document.createElement("div");
+          card.className = "card";
+
+          const targetId = `target-${char}`;
+          const target = document.createElement("div");
+          target.id = targetId;
+          target.className = "target";
+          card.appendChild(target);
+
+          const buttons = document.createElement("div");
+          buttons.className = "buttons";
+          const animateBtn = document.createElement("button");
+          animateBtn.textContent = `${char} — Animate`;
+          const quizBtn = document.createElement("button");
+          quizBtn.textContent = "Quiz";
+          buttons.appendChild(animateBtn);
+          buttons.appendChild(quizBtn);
+          card.appendChild(buttons);
+          cardsEl.appendChild(card);
+
+          const writer = HanziWriter.create(targetId, char, {
+            width: 200,
+            height: 200,
+            padding: 8,
+            showOutline: true,
+            // Local data — no CDN dependency for the character data itself,
+            // consistent with the real app's offline-first requirement.
+            charDataLoader: () => data[char],
+            // Product decision from design.md: log fully, never grade a
+            // 4-year-old. These two flags suppress ALL on-character visual
+            // correctness feedback; onMistake/onCorrectStroke below still
+            // fire for logging, just not shown to the learner.
+            showHintAfterMisses: false,
+            highlightOnComplete: false,
+          });
+
+          animateBtn.addEventListener("click", () => writer.animateCharacter());
+
+          quizBtn.addEventListener("click", () => {
+            writer.quiz({
+              onMistake: (d) =>
+                logLine(`${char}: mistake on stroke ${d.strokeNum} (${d.mistakesOnStroke} misses on this stroke)`),
+              onCorrectStroke: (d) =>
+                logLine(`${char}: stroke ${d.strokeNum} correct (${d.strokesRemaining} remaining)`),
+              onComplete: (d) => logLine(`${char}: quiz complete, ${d.totalMistakes} total mistakes`),
+            });
+            logLine(`${char}: quiz started`);
+          });
+        }
+      }
+
+      main();
+    </script>
+  </body>
+</html>

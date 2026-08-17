@@ -1,0 +1,10 @@
+{
+  "name": "shizi spike",
+  "short_name": "shizi",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#fafaf8",
+  "theme_color": "#fafaf8",
+  "icons": []
+}

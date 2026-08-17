@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Spike: stroke animation</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: -apple-system, system-ui, sans-serif;
+        background: #fafaf8;
+        color: #222;
+      }
+      header {
+        padding: 16px;
+        border-bottom: 1px solid #ddd;
+      }
+      header h1 {
+        font-size: 18px;
+        margin: 0 0 4px;
+      }
+      header p {
+        font-size: 13px;
+        color: #555;
+        margin: 4px 0;
+      }
+      main {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 24px;
+        padding: 24px;
+        justify-content: center;
+      }
+      .char-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+      }
+      .char-card svg {
+        width: 220px;
+        height: 220px;
+        background: #fff;
+        border: 1px solid #ddd;
+        border-radius: 12px;
+        touch-action: manipulation;
+      }
+      .char-card svg path {
+        fill: none;
+        stroke: #1a1a1a;
+        stroke-width: 24;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .char-card button {
+        font-size: 16px;
+        padding: 10px 20px;
+        border-radius: 8px;
+        border: 1px solid #999;
+        background: #fff;
+      }
+      .checklist {
+        max-width: 640px;
+        margin: 0 auto 24px;
+        padding: 0 24px;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Spike 2.4 — stroke-path animation on iPad</h1>
+      <p>Tap a character to replay its stroke-order animation. Data: 4 real characters from Make Me a Hanzi (see spikes/shared/PROVENANCE.md).</p>
+    </header>
+    <div class="checklist">
+      <strong>Watch for, and tell me:</strong>
+      <ul>
+        <li>Does the drawing motion look smooth, or janky/stuttery on the actual iPad?</li>
+        <li>Is the stroke thickness/style acceptable, or does it look too thin/thick/robotic?</li>
+        <li>Is the per-stroke timing (~500ms/stroke) about right, too fast, or too slow?</li>
+        <li>Any visible lag between tapping and the animation starting?</li>
+      </ul>
+    </div>
+    <main id="cards"></main>
+
+    <script>
+      const STROKE_MS = 500; // per-stroke animation duration — tune based on feedback
+      const GAP_MS = 120; // pause between strokes
+
+      async function main() {
+        const data = await fetch("../shared/sample-characters.json").then((r) => r.json());
+        const container = document.getElementById("cards");
+
+        for (const entry of data) {
+          const card = document.createElement("div");
+          card.className = "char-card";
+
+          const svgNS = "http://www.w3.org/2000/svg";
+          const svg = document.createElementNS(svgNS, "svg");
+          svg.setAttribute("viewBox", "0 0 1024 1024");
+          const g = document.createElementNS(svgNS, "g");
+          g.setAttribute("transform", "scale(1, -1) translate(0, -900)");
+          svg.appendChild(g);
+
+          const pathEls = entry.strokes.map((d) => {
+            const path = document.createElementNS(svgNS, "path");
+            path.setAttribute("d", d);
+            g.appendChild(path);
+            return path;
+          });
+
+          card.appendChild(svg);
+
+          const button = document.createElement("button");
+          button.textContent = `${entry.character} (${entry.strokes.length} strokes) — replay`;
+          card.appendChild(button);
+
+          function play() {
+            pathEls.forEach((path) => {
+              const length = path.getTotalLength();
+              path.style.transition = "none";
+              path.style.strokeDasharray = String(length);
+              path.style.strokeDashoffset = String(length);
+            });
+
+            pathEls.forEach((path, i) => {
+              const delay = i * (STROKE_MS + GAP_MS);
+              setTimeout(() => {
+                path.style.transition = `stroke-dashoffset ${STROKE_MS}ms ease-in-out`;
+                path.style.strokeDashoffset = "0";
+              }, delay);
+            });
+          }
+
+          svg.addEventListener("click", play);
+          button.addEventListener("click", play);
+          container.appendChild(card);
+          play();
+        }
+      }
+
+      main();
+    </script>
+  </body>
+</html>

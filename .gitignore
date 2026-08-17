@@ -1,0 +1,20 @@
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.DS_Store
+*.local
+.env
+.env.*
+!.env.example
+
+# Vite
+.vite/
+
+# Cloudflare
+.wrangler/
+
+# Editor
+.vscode/*
+!.vscode/extensions.json

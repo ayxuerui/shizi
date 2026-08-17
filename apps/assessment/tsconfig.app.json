@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../../packages/character-data" },
+    { "path": "../../packages/curriculum" },
+    { "path": "../../packages/learner-state" },
+    { "path": "../../packages/validator" }
+  ]
+}

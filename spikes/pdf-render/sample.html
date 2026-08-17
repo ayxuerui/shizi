@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      @font-face {
+        font-family: "LXGW WenKai Lite";
+        src: url("LXGWWenKaiLite-Regular.ttf") format("truetype");
+      }
+      @page {
+        size: A4;
+        margin: 20mm;
+      }
+      body {
+        font-family: "LXGW WenKai Lite", serif;
+        margin: 0;
+      }
+      h1 {
+        font-size: 32pt;
+        text-align: center;
+        margin-bottom: 4mm;
+      }
+      .subtitle {
+        text-align: center;
+        font-size: 14pt;
+        color: #555;
+        margin-bottom: 16mm;
+      }
+      .story {
+        font-size: 24pt;
+        line-height: 2.2;
+        letter-spacing: 2px;
+      }
+      .identity {
+        font-size: 20pt;
+        margin-top: 12mm;
+        border-top: 1px solid #ccc;
+        padding-top: 8mm;
+      }
+      .stroke-samples {
+        font-size: 48pt;
+        text-align: center;
+        margin-top: 12mm;
+        letter-spacing: 20px;
+      }
+      .small {
+        font-size: 10pt;
+        color: #888;
+        margin-top: 16mm;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>识字</h1>
+    <p class="subtitle">Spike 2.7 — LXGW WenKai Lite via headless Chromium HTML→PDF</p>
+
+    <p class="story">
+      小蓝莓 看 山。<br />
+      山 上 有 人。<br />
+      人 好，山 好。
+    </p>
+
+    <p class="identity">薛亦霖　小蓝莓　悟空　西游记</p>
+
+    <p class="stroke-samples">人 山 木 好</p>
+
+    <p class="small">
+      Checklist: are all characters rendering (no tofu/□ boxes)? Does the
+      楷体 stroke style look correct, not a fallback serif? Is spacing/line
+      height reasonable for a beginning reader? Does this look printable as
+      an actual page, not just a screen mockup?
+    </p>
+  </body>
+</html>

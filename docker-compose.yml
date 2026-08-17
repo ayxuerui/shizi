@@ -1,0 +1,22 @@
+services:
+  # Serves spikes/ over the local network (port 8080) and, via the shared
+  # cloudflared tunnel, over the public hostname configured for it in the
+  # Cloudflare Zero Trust dashboard. Throwaway dev tooling for the P0 spikes
+  # in tasks.md Section 2 — not part of the production Cloudflare Pages/
+  # Worker deploy (see infra/).
+  spikes:
+    image: nginx:1.27-alpine
+    container_name: shizi-spikes
+    ports:
+      - "8080:80"
+    volumes:
+      - ./spikes:/usr/share/nginx/html:ro
+      - ./spikes/nginx-default.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
+    networks:
+      - cloudflared-net
+
+networks:
+  cloudflared-net:
+    name: cloudflared-net
+    external: true

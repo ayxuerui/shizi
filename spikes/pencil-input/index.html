@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Spike: Apple Pencil input</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: -apple-system, system-ui, sans-serif;
+        background: #fafaf8;
+        color: #222;
+        /* touch-action: none on the canvas only stops scroll/zoom THERE.
+           It does nothing about iOS's text-selection gesture recognizer,
+           which runs page-wide and can trigger if fast pencil movement
+           drifts even slightly off-canvas onto surrounding text. Disable
+           selection and the long-press callout menu everywhere on this
+           page — nothing here needs to be selectable. */
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+      }
+      header {
+        padding: 16px;
+        border-bottom: 1px solid #ddd;
+      }
+      header h1 {
+        font-size: 18px;
+        margin: 0 0 4px;
+      }
+      .checklist {
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      .legend {
+        display: flex;
+        gap: 16px;
+        font-size: 13px;
+        margin-top: 8px;
+      }
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+      }
+      #canvas {
+        display: block;
+        width: 100vw;
+        height: 50vh;
+        background: #fff;
+        touch-action: none; /* prevent scroll/zoom from eating pointer events */
+      }
+      #log {
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        padding: 12px;
+        height: 30vh;
+        overflow-y: auto;
+        background: #111;
+        color: #cfffcf;
+        white-space: pre-wrap;
+      }
+      #clear {
+        margin: 8px 16px;
+        padding: 10px 16px;
+        font-size: 15px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Spike 2.5 — Apple Pencil input on iPad Air Safari</h1>
+      <div class="checklist">
+        <strong>Try this, and tell me what happens:</strong>
+        <ol>
+          <li>Draw a stroke with Apple Pencil while resting your palm/hand on the screen. Do any <span style="color:#c00">red</span> marks appear where your palm touched?</li>
+          <li>Draw with just a finger (no Pencil). Confirm blue marks don't appear — only green.</li>
+          <li>Check the log below: does the Pencil report a <code>pressure</code> value other than 0.5, and any <code>tiltX/tiltY</code>?</li>
+          <li>Does drawing feel laggy, or does the page scroll/zoom unexpectedly while drawing?</li>
+          <li>Write fast, on purpose, letting the Pencil drift slightly off the canvas edge sometimes. Confirm the page text never gets highlighted/selected.</li>
+          <li>Write several letters fast, back-to-back, the way that's been triggering the "next letter doesn't show up" issue. When it happens: does a small <strong>dot</strong> still appear where you first touched down for the missing letter? (There's a blue box under the canvas with live counters — <code>downs</code>/<code>strokes-drawn</code>/<code>errors</code>. Tell me those numbers, and whether <code>errors</code> is 0.)</li>
+        </ol>
+        <div class="legend">
+          <span><span class="dot" style="background:#0a6cff"></span> pen (Pencil)</span>
+          <span><span class="dot" style="background:#2ecc40"></span> touch (finger)</span>
+          <span><span class="dot" style="background:#c00"></span> unexpected touch WHILE pen is active (should not appear if palm rejection works)</span>
+        </div>
+      </div>
+    </header>
+    <canvas id="canvas"></canvas>
+    <button id="clear">Clear drawing</button>
+    <div id="log"></div>
+
+    <script>
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+      const log = document.getElementById("log");
+
+      function resize() {
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width * devicePixelRatio;
+        canvas.height = rect.height * devicePixelRatio;
+        // setTransform REPLACES the transform matrix; scale() would COMPOSE
+        // with whatever's already there, so calling resize() more than
+        // once would compound the scale factor each time.
+        ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+      }
+      resize();
+      // Deliberately NOT listening for window "resize" here. iOS Safari
+      // fires resize when its toolbar auto-hides/reappears in response to
+      // touch interaction — i.e. DURING active drawing, both on sustained
+      // fast drags and on fresh touches after a pause. Since setting
+      // canvas.width/height always clears the canvas, that resize handler
+      // was wiping strokes mid-gesture, which is what "the next letter
+      // doesn't show up" actually was. A spike page doesn't need to
+      // survive live resize; reload if you rotate the iPad.
+
+      let penActive = false;
+      let lastPoints = new Map(); // pointerId -> {x, y}
+
+      function colorFor(e) {
+        if (e.pointerType === "pen") return "#0a6cff";
+        if (e.pointerType === "touch" && penActive) return "#cc0000"; // the diagnostic case
+        if (e.pointerType === "touch") return "#2ecc40";
+        return "#888"; // mouse, e.g. trackpad testing on a laptop
+      }
+
+      function logLine(text) {
+        log.textContent = `${text}\n${log.textContent}`.slice(0, 8000);
+      }
+
+      function draw(e) {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const prev = lastPoints.get(e.pointerId);
+        ctx.strokeStyle = colorFor(e);
+        ctx.lineWidth = e.pointerType === "pen" ? 1 + (e.pressure || 0.5) * 4 : 3;
+        ctx.lineCap = "round";
+        if (prev) {
+          ctx.beginPath();
+          ctx.moveTo(prev.x, prev.y);
+          ctx.lineTo(x, y);
+          ctx.stroke();
+        }
+        lastPoints.set(e.pointerId, { x, y });
+      }
+
+      // Track "is this pointerId actually pressed" ourselves rather than
+      // trusting e.buttons in pointermove. e.buttons is known to be
+      // unreliable on the FIRST move event right after a fresh pointerdown
+      // (can briefly read 0 even though the pointer is down) — a
+      // continuous fast stroke never hits that timing window, but a fresh
+      // press after a pause reliably does, which is exactly the "next
+      // letter doesn't show up after a pause" symptom.
+      const activePointers = new Set();
+
+      // Persistent (non-scrolling) counters + last-error readout, since
+      // the two previous fixes didn't resolve "next letter after a fast
+      // one doesn't show up" — instrumenting properly now rather than
+      // continuing to guess at causes I can't reproduce without the
+      // hardware in front of me.
+      const stats = { downs: 0, strokes: 0, coalescedTotal: 0, errors: 0 };
+      const statsEl = document.createElement("pre");
+      statsEl.id = "stats";
+      statsEl.style.cssText =
+        "font-family: ui-monospace, monospace; font-size: 12px; padding: 8px 16px; background: #eef; margin: 0;";
+      canvas.insertAdjacentElement("afterend", statsEl);
+      function renderStats() {
+        statsEl.textContent = `downs=${stats.downs} strokes-drawn=${stats.strokes} coalesced-total=${stats.coalescedTotal} errors=${stats.errors}`;
+      }
+      renderStats();
+
+      canvas.addEventListener("pointerdown", (e) => {
+        try {
+          if (e.pointerType === "pen") penActive = true;
+          activePointers.add(e.pointerId);
+          const rect = canvas.getBoundingClientRect();
+          const p = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+          lastPoints.set(e.pointerId, p);
+          stats.downs++;
+          // Draw an immediate dot at contact, independent of any later
+          // moves. If a "missing letter" still shows this dot, contact WAS
+          // registered and the bug is in the move/line-drawing path. If
+          // even the dot is missing, contact itself isn't registering.
+          ctx.fillStyle = colorFor(e);
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+          ctx.fill();
+          const t = ctx.getTransform();
+          logLine(
+            `down  id=${e.pointerId} x=${p.x.toFixed(0)} y=${p.y.toFixed(0)} pressure=${e.pressure?.toFixed(2)} transform=[${t.a.toFixed(2)},${t.d.toFixed(2)}]`,
+          );
+        } catch (err) {
+          stats.errors++;
+          logLine(`ERROR in pointerdown: ${err?.message ?? err}`);
+        }
+        renderStats();
+        e.preventDefault();
+      });
+
+      canvas.addEventListener("pointermove", (e) => {
+        if (!activePointers.has(e.pointerId)) {
+          // No pointerdown ever fired for this id — genuine hover move,
+          // not a press. Drop any stale point so contact resuming later
+          // starts a fresh line instead of connecting back to the hover
+          // path.
+          lastPoints.delete(e.pointerId);
+          return;
+        }
+        try {
+          const events = e.getCoalescedEvents?.() ?? [e];
+          stats.coalescedTotal += events.length;
+          for (const sub of events) {
+            draw(sub);
+            stats.strokes++;
+          }
+        } catch (err) {
+          stats.errors++;
+          logLine(`ERROR in pointermove: ${err?.message ?? err}`);
+        }
+        renderStats();
+        e.preventDefault();
+      });
+
+      canvas.addEventListener("pointerup", (e) => {
+        if (e.pointerType === "pen") penActive = false;
+        activePointers.delete(e.pointerId);
+        lastPoints.delete(e.pointerId);
+        logLine(`up    id=${e.pointerId}`);
+        renderStats();
+        e.preventDefault();
+      });
+
+      canvas.addEventListener("pointercancel", (e) => {
+        activePointers.delete(e.pointerId);
+        lastPoints.delete(e.pointerId);
+        logLine(`cancel id=${e.pointerId}`);
+      });
+
+      document.getElementById("clear").addEventListener("click", () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        log.textContent = "";
+      });
+    </script>
+  </body>
+</html>

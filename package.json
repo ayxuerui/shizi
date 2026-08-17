@@ -1,0 +1,36 @@
+{
+  "name": "shizi",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Help Eliana learn to read Chinese characters",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "overrides": {
+    "vite": "^6.4.3"
+  },
+  "scripts": {
+    "dev": "npm run dev -w apps/assessment",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.15.0",
+    "@types/node": "^22.10.2",
+    "eslint": "^9.15.0",
+    "eslint-config-prettier": "^9.1.0",
+    "globals": "^17.11.0",
+    "prettier": "^3.4.1",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.16.0",
+    "vitest": "^3.2.7"
+  }
+}
