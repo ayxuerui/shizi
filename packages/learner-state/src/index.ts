@@ -1,7 +1,17 @@
-// Placeholder entry point for the learner-state package.
-// Real implementation (event schema, append-only log, idempotency,
-// mastery-state projection, known-set projection, repo-side JSONL
-// export) lands in tasks.md Section 4. See specs/learner-state/spec.md
-// for the behavior contract.
-
 export const PACKAGE_NAME = "@shizi/learner-state";
+
+export type { LearnerEvent, MasteryState, Outcome } from "./types.js";
+export { REQUIRED_EVENT_FIELDS } from "./types.js";
+
+export type { ValidationResult } from "./validation.js";
+export { validateEvent } from "./validation.js";
+
+export type { AppendResult } from "./event-log.js";
+export { EventLog } from "./event-log.js";
+
+export type { MasteryProjectionConfig } from "./mastery-projection.js";
+export { computeMasteryStates, DEFAULT_MASTERY_CONFIG } from "./mastery-projection.js";
+
+export { computeKnownSet } from "./known-set-projection.js";
+
+export { exportToJsonl, parseJsonl } from "./export.js";

@@ -1,7 +1,22 @@
-// Placeholder entry point for the validator package.
-// Real implementation (whitelist check, repetition threshold, density
-// limit, shaky-seeding advisory, confusable-adjacency advisory, and the
-// structured pass/fail/warning result type) lands in tasks.md Section 5.
-// See specs/content-validator/spec.md for the behavior contract.
-
 export const PACKAGE_NAME = "@shizi/validator";
+
+export type {
+  Finding,
+  FindingSeverity,
+  ValidationContext,
+  ValidationResult,
+  ValidatorConfig,
+} from "./types.js";
+export { DEFAULT_VALIDATOR_CONFIG } from "./types.js";
+
+export { validate } from "./validate.js";
+
+export {
+  checkConfusableAdjacency,
+  checkDensity,
+  checkRepetitionThreshold,
+  checkShakySeeding,
+  checkWhitelist,
+} from "./rules.js";
+
+export { hanCharacterOccurrences, isHanCharacter } from "./han-characters.js";

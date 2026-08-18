@@ -5,9 +5,8 @@
     "outDir": "./dist",
     "rootDir": "./src"
   },
-  "include": ["src"],
+  "include": ["src/**/*"],
   "references": [
-    { "path": "../character-data" },
-    { "path": "../learner-state" }
+    { "path": "../character-data" }
   ]
 }

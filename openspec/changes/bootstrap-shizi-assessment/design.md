@@ -98,6 +98,17 @@ Two-hit confirmation with a latency cutoff is chosen over a single-hit or accura
 
 The scoring function's terms (word-unlock, story-unlock potential) are all zero when the known-set is empty, so no ranking is possible at the start. **Decision:** a hand-authored fixed order for the first 25 productive characters, sourced from this project's discussion (grammar skeleton + basic concrete pictographs), used until exhausted — skipping any the assessment discovers she already knows. Phase B's scoring runs only once Phase A is exhausted, when there is enough known-vocabulary for its terms to be meaningful.
 
+### Scoring function scope gap: word-unlock and story-unlock are stubs, flagged not silently absorbed
+
+Implementing the Phase B scoring function (Section 6) surfaced a real gap between what the `curriculum` spec asks for and what data exists in this change's scope. Two of its five scoring factors need data no capability provides yet:
+
+- **word-unlock** ("potential words unlocked") needs word-level data — which compound words a character participates in. CC-CEDICT is license-cleared (`data/PROVENANCE.md`) but has never been integrated anywhere; building that integration (fetch, parse, index by character, decide how "unlock" is quantified) is a real, separate data-sourcing task, not a two-line addition.
+- **story-unlock** ("potential story content unlocked") needs a story/episode corpus to check candidates against. That corpus doesn't exist until the `printed-reader` change (phase P3) — explicitly out of scope for `bootstrap-shizi-assessment` per proposal.md.
+
+**Decision:** both factors are implemented as explicit, documented functions that return a neutral 0 for every candidate, wired into the same weighted-sum architecture as the other three factors (so enabling them later is a function-body change, not a redesign). **Not** implemented as silent no-ops — each has a code comment explaining exactly what's missing and why, and this design.md entry exists so the gap is visible at the project level, not just to someone reading `scoring.ts`.
+
+**Trade-off accepted:** Phase B selection currently runs on personal-relevance + learnability + confusability-penalty only (3 of 5 intended factors). This is a real reduction in selection quality until word/story data exists, accepted because fabricating either dataset now would mean inventing content-authoring infrastructure (the `printed-reader` change's actual job) inside a data-core change, or bolting on an unreviewed CC-CEDICT integration outside its own task. **Revisit when:** CC-CEDICT is first integrated for any purpose (wire word-unlock then), or when `printed-reader` exists (wire story-unlock then).
+
 ### Validator built ahead of its first consumer
 
 The `content-validator` capability is fully specified and implemented in this change even though no authoring pipeline calls it yet (that arrives in `printed-reader`). **Decision, deliberate:** fixing the validator's contract now means the `printed-reader` design can treat it as a given interface rather than co-designing it under that change's own time pressure. **Alternative considered:** defer the validator entirely to `printed-reader`. Rejected — the curriculum's confusability-spacing logic and the validator's confusable-adjacency check share the same underlying character-data relationship, and building both together avoids defining that relationship twice.

@@ -1,7 +1,15 @@
-// Placeholder entry point for the curriculum package.
-// Real implementation (fixed Phase A sequence, greedy Phase B scoring,
-// confusability-spacing constraint) lands in tasks.md Section 6.
-// Depends on @shizi/character-data and @shizi/learner-state, which is why
-// those are already declared as workspace dependencies here.
-
 export const PACKAGE_NAME = "@shizi/curriculum";
+
+export type {
+  CurriculumConfig,
+  CurriculumState,
+  ScoredCandidate,
+  ScoringWeights,
+  SelectionResult,
+} from "./types.js";
+export { DEFAULT_CURRICULUM_CONFIG, DEFAULT_SCORING_WEIGHTS } from "./types.js";
+
+export { isPhaseAExhausted, selectFromPhaseA } from "./phase-a.js";
+export { scoreCandidate } from "./scoring.js";
+export { filterBySpacing, violatesSpacingConstraint } from "./spacing.js";
+export { selectNextCharacter } from "./select.js";

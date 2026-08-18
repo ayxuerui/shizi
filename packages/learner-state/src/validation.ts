@@ -1,0 +1,78 @@
+import { REQUIRED_EVENT_FIELDS, type LearnerEvent } from "./types.js";
+
+export interface ValidationResult {
+  valid: boolean;
+  errors: string[];
+}
+
+/**
+ * Checks that every required field is *present* (not `undefined`) — not
+ * that it's truthy. `daysSinceLastExposure` legitimately allows `null`
+ * (first exposure), `latencyMs`/`positionInSession`/`priorExposureCount`
+ * legitimately allow `0`, and `adultPresent` legitimately allows `false`.
+ * A naive truthy check would wrongly reject all of those.
+ */
+export function validateEvent(event: unknown): ValidationResult {
+  const errors: string[] = [];
+
+  if (typeof event !== "object" || event === null) {
+    return { valid: false, errors: ["event must be a non-null object"] };
+  }
+
+  const record = event as Record<string, unknown>;
+
+  for (const field of REQUIRED_EVENT_FIELDS) {
+    if (!(field in record) || record[field] === undefined) {
+      errors.push(`missing required field: ${field}`);
+    }
+  }
+
+  if (errors.length > 0) {
+    return { valid: false, errors };
+  }
+
+  const typed = record as unknown as LearnerEvent;
+
+  if (typeof typed.id !== "string" || typed.id.length === 0) {
+    errors.push("id must be a non-empty string");
+  }
+  if (typeof typed.timestamp !== "string" || Number.isNaN(Date.parse(typed.timestamp))) {
+    errors.push("timestamp must be a valid ISO 8601 string");
+  }
+  if (typeof typed.sessionId !== "string" || typed.sessionId.length === 0) {
+    errors.push("sessionId must be a non-empty string");
+  }
+  if (typeof typed.character !== "string" || typed.character.length === 0) {
+    errors.push("character must be a non-empty string");
+  }
+  if (typeof typed.modality !== "string" || typed.modality.length === 0) {
+    errors.push("modality must be a non-empty string");
+  }
+  if (typed.outcome !== "correct" && typed.outcome !== "incorrect") {
+    errors.push('outcome must be "correct" or "incorrect"');
+  }
+  if (typeof typed.latencyMs !== "number" || typed.latencyMs < 0) {
+    errors.push("latencyMs must be a non-negative number");
+  }
+  if (typeof typed.positionInSession !== "number" || typed.positionInSession < 0) {
+    errors.push("positionInSession must be a non-negative number");
+  }
+  if (typeof typed.priorExposureCount !== "number" || typed.priorExposureCount < 0) {
+    errors.push("priorExposureCount must be a non-negative number");
+  }
+  if (typed.daysSinceLastExposure !== null && typeof typed.daysSinceLastExposure !== "number") {
+    errors.push("daysSinceLastExposure must be a number or null");
+  }
+  if (
+    typeof typed.timeOfDay !== "number" ||
+    typed.timeOfDay < 0 ||
+    typed.timeOfDay > 23
+  ) {
+    errors.push("timeOfDay must be a number between 0 and 23");
+  }
+  if (typeof typed.adultPresent !== "boolean") {
+    errors.push("adultPresent must be a boolean");
+  }
+
+  return { valid: errors.length === 0, errors };
+}

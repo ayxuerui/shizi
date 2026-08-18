@@ -72,14 +72,39 @@ verification; per design.md, this is a go/no-go gate before Section 3
     NOTICE) covering CC-CEDICT attribution + BY-SA terms before any
     CC-CEDICT-derived data is committed.
 
+## HSK 3.0 character list — pool curation source
+
+Introduced during Section 3 (task 3.1) implementation, not part of the
+original P0 spike gate — recorded here per the `character-data` spec's own
+"Data provenance and licensing" requirement before use, same discipline as
+the datasets above.
+
+- **Source:** https://github.com/elkmovie/hsk30 (`charlist.txt`) — text
+  extracted and OCR'd from the official PRC Ministry of Education HSK 3.0
+  standard PDF.
+- **License:** MIT, confirmed directly (`LICENSE` in that repo). Copyright
+  (c) 2021 Pleco Inc.
+- **Verdict: GO.** MIT is permissive — no conditions beyond the standard
+  MIT notice requirement if redistributing the file verbatim, which we're
+  not doing (we use it as a curation input, not a redistributed artifact).
+- **What we used it for:** Level 1's 300 characters, individually reviewed
+  by hand (not machine-filtered) to select ~200 concrete/age-appropriate
+  candidates for the pool, per `packages/character-data/src/data/pool-membership.ts`.
+  We do not use, ship, or redistribute `charlist.txt` itself — only the
+  resulting curated character selection.
+
 ## Summary
 
 | Dataset | License | Verdict | Real conditions? |
 |---|---|---|---|
 | Make Me a Hanzi (`graphics.txt`) | Arphic Public License | GO | Yes — retain license file, note modifications, keep changes publicly available |
 | LXGW WenKai | SIL OFL 1.1 | GO | Minor — include `OFL.txt`, don't rename |
-| CC-CEDICT | CC BY-SA 3.0 | GO | Yes — attribution, share-alike, note changes |
+| CC-CEDICT | CC BY-SA 3.0 | GO | Yes — attribution, share-alike, note changes. **Not yet integrated** — no glosses/pinyin used anywhere as of Section 3. |
+| HSK 3.0 charlist | MIT | GO | None beyond standard MIT notice; not redistributed, used as a curation input only |
 
-All three clear the gate. None are blockers for Section 3, provided the
-"Action" items above are carried out when each dataset is actually
-integrated (tracked as explicit tasks, not left implicit).
+All four clear the gate. Make Me a Hanzi's Arphic-license actions are
+fulfilled as of Section 3 (`packages/character-data/src/data/ARPHICPL.TXT`
++ `CHANGES.md`). LXGW WenKai's and CC-CEDICT's actions remain open until
+those datasets are actually integrated (Section 8 for the font; whenever
+glosses are first used for CC-CEDICT) — tracked as explicit tasks, not
+left implicit.
