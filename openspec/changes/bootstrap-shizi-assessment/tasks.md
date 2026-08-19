@@ -19,10 +19,10 @@
 
 - [x] 3.1 Assemble ~200-character candidate pool from frequency data + this project's curated selections — 203 productive characters: HSK 3.0 Level 1 (MIT-licensed, real source — see `packages/character-data/src/data/pool-membership.ts`) individually reviewed and curated down from 300, plus Phase A plus 3 thematic additions (悟空姥). Full reasoning and a deferred tier-2 list documented in code comments.
 - [x] 3.2 Confirm and record identity-set characters (薛, 亦, 霖, 小, 蓝, 莓) as non-productive — `IDENTITY_SET`/`isIdentityCharacter` in `packages/character-data`.
-- [ ] 3.3 Collect parent hand-tagging pass: concreteness/imageability and pictographic-origin flags for all ~200 candidates — BLOCKED on parent input. Draft tags generated for all 209 characters to speed up review (correct rather than originate from scratch) — see `data/tagging-review.csv` and `data/TAGGING-REVIEW.md`. Also needs a frequency-rank judgment call for 悟/空/姥/木 (outside the HSK1 source).
+- [ ] 3.3 Collect parent hand-tagging pass: concreteness/imageability and pictographic-origin flags for all ~200 candidates — STILL BLOCKED on parent review, but no longer blocking downstream work: `scripts/build-tags.mjs` generates draft tags for all 209 characters from `data/tagging-review.csv` into `src/data/tags.ts`, wired into `pool.ts` and flagged `tagSource: "draft"` (not authoritative — see `character-data` spec's "Human-supplied concreteness tag" scenario) until the parent's review lands; re-running the script after review flips reviewed rows to `tagSource: "reviewed"`. Also still needs a frequency-rank judgment call for 悟/空/姥/木 (outside the HSK1 source).
 - [x] 3.4 Integrate stroke-count and ordered stroke-path data per candidate character — real Make Me a Hanzi data for all 209 characters (pool + identity), verified against known stroke counts in tests.
 - [x] 3.5 Compute confusability relationships (shared-stroke / near-mirror / component-difference) across the pool — curated pedagogical pairs + a computed geometric-shape-similarity fallback (`computeConfusability`), tested.
-- [x] 3.6 Build exclusion logic: candidates missing a required attribute are excluded from selection until supplied — `isUsable`/`missingAttributes`/`partitionByUsability`, tested. Correctly excludes the entire pool right now, since 3.3 hasn't happened yet — that's expected, not a bug.
+- [x] 3.6 Build exclusion logic: candidates missing a required attribute are excluded from selection until supplied — `isUsable`/`missingAttributes`/`partitionByUsability`, tested. Now that 3.3's draft tags are landed, excludes exactly the 10 characters still missing `frequencyRank` (悟/空/姥/木 + the 6 identity characters) rather than the entire pool.
 - [x] 3.7 Write the fixed 25-character Phase A sequence (grammar skeleton + identity + basic pictographs) as a reviewable, hand-authored list — `PHASE_A_SEQUENCE`, length-asserted at 25, deliberately excludes every identity character.
 - [ ] 3.8 License compliance: bundle `ARPHICPL.TXT` + a change-note with the subsetted stroke-path data, and add `data/ATTRIBUTIONS.md` covering CC-CEDICT's BY-SA attribution (per `data/PROVENANCE.md` action items) — Arphic half DONE (`packages/character-data/src/data/ARPHICPL.TXT` + `CHANGES.md`). CC-CEDICT half deliberately NOT done: no CC-CEDICT data (glosses/pinyin) has actually been incorporated anywhere yet in this pool — only character identity was used, sourced from HSK1, not CEDICT. Attributing a dataset not yet used would be premature; revisit when CC-CEDICT is actually integrated.
 
@@ -57,7 +57,7 @@
 
 ## 7. Adaptivity instrumentation
 
-- [ ] 7.1 Ensure all activity event-writers populate full schema, including fields with no current consumer (time-of-day, adult-present, session-position) — BLOCKED: no activity event-writer exists yet; this is an audit of Section 8's app code, which hasn't been built. `learner-state`'s schema already requires these fields (see `validation.ts`), so whatever Section 8 writes will be structurally forced to include them — revisit as part of Section 8.
+- [x] 7.1 Ensure all activity event-writers populate full schema, including fields with no current consumer (time-of-day, adult-present, session-position) — `packages/assessment-engine`'s `AssessmentSession.recordResponse` is the first (and so far only) activity event-writer; it populates every `LearnerEvent` field including `timeOfDay`/`adultPresent`/`positionInSession`, verified in `session.test.ts` against `validateEvent`.
 - [x] 7.2 Implement matched-pair identification (stroke count, concreteness, frequency, confusability-neighborhood size) — new `@shizi/adaptivity` package (not scaffolded in Section 1 — a gap in the original plan, filled here since Section 7 needed somewhere to live). `findMatchedPairs`/`isMatchedPair`, tolerance-based matching, concreteness required to match exactly (categorical).
 - [x] 7.3 Implement random arm assignment for matched pairs, recorded independent of outcome — `assignPairToArms` + `AssignmentLog` (append-only, no update/delete API, mirroring `learner-state`'s `EventLog` pattern). Handles the degenerate single-arm case explicitly (this change's actual state — only "hear-tap" exists).
 - [ ] 7.4 Implement parent one-tap end-of-session rating capture (loved it / fine / checked out), linked to session id, with skip-without-blocking behavior — BLOCKED: this is a UI interaction (a rating prompt at session end), which belongs with Section 8's actual app and doesn't exist as a standalone unit yet.
@@ -65,19 +65,23 @@
 
 ## 8. Assessment game (PWA)
 
+Split into two passes: the headless, unit-tested engine (8.4–8.7, 8.10's logic, 8.12, 8.13) landed
+first as `packages/assessment-engine`, so the PWA shell/UI pass (8.1–8.3, 8.8–8.9, 8.10's UI half,
+8.11) has a stable, tested interface to render against rather than building both at once.
+
 - [ ] 8.1 Build PWA shell: service worker precache (app shell, font subset, audio, art assets), add-to-home-screen manifest — include `OFL.txt` alongside the bundled LXGW WenKai subset per `data/PROVENANCE.md`
 - [ ] 8.2 Implement offline event queue (IndexedDB) with opportunistic flush to sync endpoint
 - [ ] 8.3 Implement first-gesture audio-unlock screen: play an `HTMLAudioElement` clip on the unlock tap (not `AudioContext.resume()` alone — confirmed insufficient on iPad Air Safari, see design.md), then proceed to WebAudio for the rest of the session
-- [ ] 8.4 Implement adaptive frontier-search probe selection (coarse-to-narrow, including identity-set and shaky-state probes)
-- [ ] 8.5 Implement two-hit + latency-threshold guess-detection logic
-- [ ] 8.6 Implement felt-difficulty dilution (configurable easy:informative ratio, default 4:1)
-- [ ] 8.7 Implement Loop 4 difficulty calibration (rolling accuracy → distractor confusability adjustment)
+- [x] 8.4 Implement adaptive frontier-search probe selection (coarse-to-narrow, including identity-set and shaky-state probes) — `packages/assessment-engine`'s `difficulty.ts`/`frontier.ts`: a real frequencyRank+strokeCount difficulty proxy, coarse quantile cycling before both bounds are known, then narrows to the `[knownFloor, unknownCeiling]` midpoint. Identity-set and `shaky`-state characters are forced into rotation every Nth informative slot (`session.ts`), since they lack a `frequencyRank` and so bypass the difficulty axis entirely — see design.md.
+- [x] 8.5 Implement two-hit + latency-threshold guess-detection logic — deliberately NOT reimplemented: `guess-detection.ts`'s `classifyResponse` only classifies a single response (confirming/inconclusive/miss) for immediate session-local signal; the actual two-consecutive-fast-correct authority is `learner-state`'s existing `computeMasteryStates`, called directly by `session.ts` — see design.md's "reuse, don't re-derive" entry.
+- [x] 8.6 Implement felt-difficulty dilution (configurable easy:informative ratio, default 4:1) — `dilution.ts`, a fixed repeating-block schedule (informative last in each block) plus rotation through the easy pool (identity ∪ confirmed-known), tested exact-ratio over a full bout in `session.test.ts`.
+- [x] 8.7 Implement Loop 4 difficulty calibration (rolling accuracy → distractor confusability adjustment) — `calibration.ts` (rolling accuracy, band-relative adjustment) + `distractors.ts` (confusability-level-aware option selection, reusing `character-data`'s confusability index).
 - [ ] 8.8 Build narrative framing UI ("help 悟空" goal-oriented probes; progress advances regardless of correctness)
 - [ ] 8.9 Build no-failure-state interaction feedback (neutral/gentle incorrect-response cue, no score display)
-- [ ] 8.10 Implement session bounding (60-90s bout, positive closing beat)
+- [x] 8.10 Implement session bounding (60-90s bout, positive closing beat) — logic half only: `session.ts`'s `nextProbe` enforces both a duration bound (injected clock) and an item-count backstop, returning `session-complete`. The positive closing beat itself is UI, deferred to the PWA pass.
 - [ ] 8.11 Implement touch + stylus input handling with palm-rejection when stylus active, large touch targets
-- [ ] 8.12 Wire assessment outcomes into learner-state event log (no parallel/disconnected state)
-- [ ] 8.13 Wire matched-pair assignment calls into probe selection where applicable
+- [x] 8.12 Wire assessment outcomes into learner-state event log (no parallel/disconnected state) — `session.ts`'s `recordResponse` builds a full, schema-complete `LearnerEvent` per response (via `learner-state`'s own `EventLog`/`validateEvent`) and recomputes mastery state from that same log on demand; no separate projection is cached. This also closes task 7.1.
+- [x] 8.13 Wire matched-pair assignment calls into probe selection where applicable — `session.ts`'s `nextProbe` calls `findMatchedPairs`/`assignPairToArms` at presentation time, before the outcome is known, on a character's first-ever exposure across the learner's full history (not just this session).
 
 ## 9. Infra & deploy
 

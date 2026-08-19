@@ -16,8 +16,8 @@
   },
   "scripts": {
     "dev": "npm run dev -w apps/assessment",
-    "build": "npm run build --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build": "tsc -b && npm run build --workspaces --if-present",
+    "typecheck": "tsc -b && npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest"

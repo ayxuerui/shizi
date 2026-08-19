@@ -31,11 +31,13 @@ describe("assembleCandidatePool", () => {
     expect(entry!.strokeData!.medians).toHaveLength(3);
   });
 
-  it("leaves concreteness and pictographic null pending the hand-tagging pass (task 3.3)", () => {
-    // This is intentional current state, not a bug — see exclusion.ts.
+  it("populates concreteness and pictographic from the draft tag pass (task 3.3), flagged unreviewed", () => {
+    // Provisional, not a bug — see exclusion.ts and scripts/build-tags.mjs.
+    // A real parent review changes tagSource, not whether these are populated.
     const entry = pool.get("山");
-    expect(entry!.concreteness).toBeNull();
-    expect(entry!.pictographic).toBeNull();
+    expect(entry!.concreteness).toBe("concrete");
+    expect(entry!.pictographic).toBe(true);
+    expect(entry!.tagSource).toBe("draft");
   });
 
   it("leaves frequencyRank null for characters outside the HSK1 source (e.g. thematic additions)", () => {

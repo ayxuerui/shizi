@@ -9,6 +9,7 @@ export type {
   IdentityRole,
   IdentitySetEntry,
   StrokeData,
+  TagSource,
 } from "./types.js";
 
 export {
