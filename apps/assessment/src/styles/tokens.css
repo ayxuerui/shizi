@@ -10,6 +10,8 @@
  *   That's not an oversight — see feedback/cues.ts's doc comment. The
  *   "no visible scoring or failure state" requirement is partly enforced
  *   by there being no error-red token to reach for in the first place.
+ *   `diagnostics/theme.ts` deliberately keeps its own local status colors
+ *   and does NOT add a token here — see its header comment.
  */
 :root {
   --font-hanzi: "LXGW WenKai Subset", serif;

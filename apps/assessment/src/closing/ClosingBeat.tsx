@@ -1,11 +1,11 @@
+import type { Rating } from "@shizi/adaptivity";
 import { COPY } from "../copy.js";
 import { WukongPlaceholder } from "../narrative/WukongPlaceholder.js";
 import { ParentRatingPrompt } from "../parent/ParentRatingPrompt.js";
 
 export interface ClosingBeatProps {
-  sessionId: string;
   ratingPhase: "asking" | "settled";
-  onRate: () => void;
+  onRate: (rating: Rating) => void;
   onSkipRating: () => void;
 }
 
@@ -15,15 +15,13 @@ export interface ClosingBeatProps {
  * zero numbers, no summary — per the "no visible scoring" requirement,
  * this screen has nothing to say about how many were right.
  */
-export function ClosingBeat({ sessionId, ratingPhase, onRate, onSkipRating }: ClosingBeatProps) {
+export function ClosingBeat({ ratingPhase, onRate, onSkipRating }: ClosingBeatProps) {
   return (
     <div style={{ textAlign: "center", padding: "2rem" }}>
       <WukongPlaceholder />
       <h1>{COPY.closing.title}</h1>
       <p>{COPY.closing.subtitle}</p>
-      {ratingPhase === "asking" && (
-        <ParentRatingPrompt sessionId={sessionId} onRate={onRate} onSkip={onSkipRating} />
-      )}
+      {ratingPhase === "asking" && <ParentRatingPrompt onRate={onRate} onSkip={onSkipRating} />}
     </div>
   );
 }

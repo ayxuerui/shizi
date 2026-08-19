@@ -1,5 +1,5 @@
 import { validateEvent, type LearnerEvent } from "@shizi/learner-state";
-import type { ArmAssignment } from "@shizi/adaptivity";
+import { validateSessionRating, type ArmAssignment, type SessionRating } from "@shizi/adaptivity";
 import { checkAuth } from "./auth.js";
 import type { EventStore } from "./db.js";
 
@@ -111,4 +111,46 @@ export function handleAssignmentsSync(input: SyncRequestInput, deps: SyncDeps): 
   }
 
   return { status: 200, body: { inserted, duplicates, rejected } };
+}
+
+/**
+ * `adaptivity-instrumentation` spec's "Parent one-tap session rating".
+ * Reuses `validateSessionRating` from `@shizi/adaptivity` — the same
+ * validator the client uses on enqueue/re-read — rather than a
+ * hand-rolled structural guard like `isValidAssignment` above, so the
+ * allowed rating values can't drift between client and server.
+ */
+export function handleRatingsSync(input: SyncRequestInput, deps: SyncDeps): SyncResponseResult {
+  if (!checkAuth(input.authHeader, deps.expectedToken)) {
+    return { status: 401, body: { error: "unauthorized" } };
+  }
+
+  let candidates: unknown[];
+  try {
+    candidates = parseNdjson(input.bodyText);
+  } catch {
+    return { status: 400, body: { error: "malformed NDJSON body" } };
+  }
+
+  let inserted = 0;
+  let duplicates = 0;
+  let rejected = 0;
+  const errors: string[] = [];
+
+  for (const candidate of candidates) {
+    const result = validateSessionRating(candidate);
+    if (!result.valid) {
+      rejected += 1;
+      errors.push(...result.errors);
+      continue;
+    }
+    const { inserted: wasInserted } = deps.store.insertRating(candidate as SessionRating);
+    if (wasInserted) inserted += 1;
+    else duplicates += 1;
+  }
+
+  return {
+    status: 200,
+    body: { inserted, duplicates, rejected, ...(errors.length > 0 ? { errors } : {}) },
+  };
 }

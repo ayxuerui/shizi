@@ -37,6 +37,18 @@ export function wireVisibilityResume(context: AudioContext, doc: Document = docu
   return () => doc.removeEventListener("visibilitychange", handler);
 }
 
+/**
+ * Peek-only: reports the existing shared context (or `null`) WITHOUT
+ * creating one. `getSharedAudioContext()` creates on call, which is right
+ * for the real unlock path but wrong for `diagnostics/capabilities/audio.ts`
+ * — reporting "has a context been created" must not itself instantiate a
+ * pre-gesture context, which would misleadingly report as "created" and
+ * burn the one-context-only singleton this file exists to protect.
+ */
+export function peekSharedAudioContext(): AudioContext | null {
+  return sharedContext;
+}
+
 /** Test-only: resets the module singleton so each test gets a fresh context. */
 export function __resetSharedAudioContextForTests(): void {
   sharedContext = null;

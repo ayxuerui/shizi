@@ -1,8 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LearnerEvent } from "@shizi/learner-state";
-import type { ArmAssignment } from "@shizi/adaptivity";
+import type { ArmAssignment, SessionRating } from "@shizi/adaptivity";
 import { __resetDBForTests } from "./db.js";
-import { enqueueAssignments, enqueueEvent, listPendingAssignments, listPendingEvents } from "./event-queue.js";
+import {
+  enqueueAssignments,
+  enqueueEvent,
+  enqueueRating,
+  listPendingAssignments,
+  listPendingEvents,
+  listPendingRatings,
+} from "./event-queue.js";
 import { flushQueue } from "./sync.js";
 
 function makeEvent(overrides: Partial<LearnerEvent> = {}): LearnerEvent {
@@ -29,6 +36,15 @@ function makeAssignment(overrides: Partial<ArmAssignment> = {}): ArmAssignment {
     arm: "hear-tap",
     pairId: "pair-1",
     assignedAt: "2026-08-19T09:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function makeRating(overrides: Partial<SessionRating> = {}): SessionRating {
+  return {
+    sessionId: "session-1",
+    rating: "loved",
+    recordedAt: "2026-08-19T09:00:00.000Z",
     ...overrides,
   };
 }
@@ -75,7 +91,7 @@ describe("flushQueue (task 9.2, assessment spec: 'Full offline operation')", () 
 
     const result = await flushQueue({ fetchImpl, isOnline: () => true });
 
-    expect(result).toEqual({ status: "flushed", eventsCount: 1, assignmentsCount: 0 });
+    expect(result).toEqual({ status: "flushed", eventsCount: 1, assignmentsCount: 0, ratingsCount: 0 });
     expect(fetchImpl).toHaveBeenCalledWith("https://sync.example.test/events", expect.anything());
     expect(await listPendingEvents()).toEqual([]);
   });
@@ -88,21 +104,48 @@ describe("flushQueue (task 9.2, assessment spec: 'Full offline operation')", () 
 
     const result = await flushQueue({ fetchImpl, isOnline: () => true });
 
-    expect(result).toEqual({ status: "flushed", eventsCount: 0, assignmentsCount: 1 });
+    expect(result).toEqual({ status: "flushed", eventsCount: 0, assignmentsCount: 1, ratingsCount: 0 });
     expect(fetchImpl).toHaveBeenCalledWith("https://sync.example.test/assignments", expect.anything());
     expect(await listPendingAssignments()).toEqual([]);
   });
 
-  it("flushes both events and assignments together in one call", async () => {
+  it("flushes pending ratings to /ratings and marks them synced on a 2xx response", async () => {
     vi.stubEnv("VITE_SYNC_ENDPOINT", "https://sync.example.test");
-    await enqueueEvent(makeEvent());
-    await enqueueAssignments([makeAssignment()]);
+    const rating = makeRating();
+    await enqueueRating(rating);
     const fetchImpl = vi.fn(async () => new Response(null, { status: 200 }));
 
     const result = await flushQueue({ fetchImpl, isOnline: () => true });
 
-    expect(result).toEqual({ status: "flushed", eventsCount: 1, assignmentsCount: 1 });
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(result).toEqual({ status: "flushed", eventsCount: 0, assignmentsCount: 0, ratingsCount: 1 });
+    expect(fetchImpl).toHaveBeenCalledWith("https://sync.example.test/ratings", expect.anything());
+    expect(await listPendingRatings()).toEqual([]);
+  });
+
+  it("flushes events, assignments, and ratings together in one call", async () => {
+    vi.stubEnv("VITE_SYNC_ENDPOINT", "https://sync.example.test");
+    await enqueueEvent(makeEvent());
+    await enqueueAssignments([makeAssignment()]);
+    await enqueueRating(makeRating());
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 200 }));
+
+    const result = await flushQueue({ fetchImpl, isOnline: () => true });
+
+    expect(result).toEqual({ status: "flushed", eventsCount: 1, assignmentsCount: 1, ratingsCount: 1 });
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
+  it("a failed assignments flush does not attempt the ratings flush in the same call", async () => {
+    vi.stubEnv("VITE_SYNC_ENDPOINT", "https://sync.example.test");
+    await enqueueAssignments([makeAssignment()]);
+    await enqueueRating(makeRating());
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 500 }));
+
+    const result = await flushQueue({ fetchImpl, isOnline: () => true });
+
+    expect(result.status).toBe("failed");
+    expect(fetchImpl).toHaveBeenCalledTimes(1); // stopped after /assignments failed
+    expect(await listPendingRatings()).toHaveLength(1); // untouched, retried next time
   });
 
   it("leaves events pending and reports failure on a non-2xx response — never throws", async () => {

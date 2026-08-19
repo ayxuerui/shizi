@@ -1,5 +1,5 @@
 import { validateEvent, type LearnerEvent } from "@shizi/learner-state";
-import type { ArmAssignment } from "@shizi/adaptivity";
+import { validateSessionRating, type ArmAssignment, type SessionRating } from "@shizi/adaptivity";
 import { getDB } from "./db.js";
 
 /**
@@ -77,6 +77,52 @@ export async function markEventsSynced(ids: readonly string[]): Promise<void> {
   await Promise.all(
     ids.map(async (id) => {
       const existing = await tx.store.get(id);
+      if (existing) await tx.store.put({ ...existing, synced: true });
+    }),
+  );
+  await tx.done;
+}
+
+/**
+ * Validates before every write, same discipline as `enqueueEvent` — a
+ * malformed rating reaching here would be a bug in this app's own
+ * closing-beat wiring, not an expected external input.
+ */
+export async function enqueueRating(rating: SessionRating): Promise<void> {
+  const result = validateSessionRating(rating);
+  if (!result.valid) {
+    console.error("event-queue: refusing to enqueue invalid rating", result.errors, rating);
+    return;
+  }
+  const db = await getDB();
+  await db.put("ratings", { rating, synced: false });
+}
+
+/** Follows the `events` (natural-key) pattern, not `assignments`'
+ * surrogate-key pattern — `SessionRating.sessionId` is already unique. */
+export async function listPendingRatings(): Promise<SessionRating[]> {
+  const db = await getDB();
+  const all = await db.getAll("ratings");
+  const pending: SessionRating[] = [];
+  for (const stored of all) {
+    if (stored.synced) continue;
+    const result = validateSessionRating(stored.rating);
+    if (result.valid) {
+      pending.push(stored.rating);
+    } else {
+      console.warn("event-queue: skipping invalid stored rating on read", result.errors);
+    }
+  }
+  return pending;
+}
+
+export async function markRatingsSynced(sessionIds: readonly string[]): Promise<void> {
+  if (sessionIds.length === 0) return;
+  const db = await getDB();
+  const tx = db.transaction("ratings", "readwrite");
+  await Promise.all(
+    sessionIds.map(async (sessionId) => {
+      const existing = await tx.store.get(sessionId);
       if (existing) await tx.store.put({ ...existing, synced: true });
     }),
   );

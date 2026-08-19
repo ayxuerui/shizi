@@ -1,6 +1,6 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { LearnerEvent } from "@shizi/learner-state";
-import type { ArmAssignment } from "@shizi/adaptivity";
+import type { ArmAssignment, SessionRating } from "@shizi/adaptivity";
 
 export interface StoredEvent {
   event: LearnerEvent;
@@ -9,6 +9,11 @@ export interface StoredEvent {
 
 export interface StoredAssignment {
   assignment: ArmAssignment;
+  synced: boolean;
+}
+
+export interface StoredRating {
+  rating: SessionRating;
   synced: boolean;
 }
 
@@ -28,10 +33,17 @@ interface ShiziDBSchema extends DBSchema {
     key: number;
     value: StoredAssignment;
   };
+  ratings: {
+    // SessionRating's own natural key — one rating per session by
+    // construction (see its doc comment) — so this follows the `events`
+    // (natural-key) pattern, not `assignments`' surrogate-key pattern.
+    key: string;
+    value: StoredRating;
+  };
 }
 
 const DB_NAME = "shizi-assessment";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise: Promise<IDBPDatabase<ShiziDBSchema>> | null = null;
 
@@ -52,6 +64,9 @@ export function getDB(): Promise<IDBPDatabase<ShiziDBSchema>> {
         }
         if (!db.objectStoreNames.contains("assignments")) {
           db.createObjectStore("assignments", { autoIncrement: true });
+        }
+        if (!db.objectStoreNames.contains("ratings")) {
+          db.createObjectStore("ratings", { keyPath: "rating.sessionId" });
         }
       },
     });

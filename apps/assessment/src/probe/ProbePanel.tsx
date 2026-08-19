@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ProbeItem } from "@shizi/assessment-engine";
 import { createSpeechSynthesisPromptVoice } from "../audio/narration.js";
 import { TapTarget } from "../components/TapTarget.js";
@@ -51,9 +51,27 @@ function optionStyle(option: ProbeItem["character"], probe: ProbeItem, selected:
  * and `cue` (which is `"acknowledge" | "redirect"`, never anything
  * resembling an error), never a correctness signal from the engine
  * directly.
+ *
+ * "Listen again" only renders once `promptVoice.isAvailable()` reports a
+ * real zh voice was found (task 10.0 diagnostics work fixed this — it
+ * used to be a pure API-presence check, true even with zero Chinese
+ * voices installed). An inert button promising a sound that will never
+ * come would be its own silent-failure mode; absence of the control
+ * isn't a visible failure state, so this doesn't touch that guarantee.
  */
 export function ProbePanel({ probe, disabled, selected, cue, onSelect }: ProbePanelProps) {
   const promptVoice = useMemo(() => createSpeechSynthesisPromptVoice(), []);
+  const [voiceAvailable, setVoiceAvailable] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void promptVoice.primeVoices().then(() => {
+      if (!cancelled) setVoiceAvailable(promptVoice.isAvailable());
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [promptVoice]);
 
   useEffect(() => {
     promptVoice.speak(probe.character);
@@ -76,15 +94,17 @@ export function ProbePanel({ probe, disabled, selected, cue, onSelect }: ProbePa
           </TapTarget>
         ))}
       </div>
-      <div style={{ marginTop: "1rem", display: "flex", justifyContent: "center" }}>
-        <TapTarget
-          label={COPY.probe.listenAgain}
-          disabled={disabled}
-          onActivate={() => promptVoice.speak(probe.character)}
-        >
-          <span>{COPY.probe.listenAgain}</span>
-        </TapTarget>
-      </div>
+      {voiceAvailable && (
+        <div style={{ marginTop: "1rem", display: "flex", justifyContent: "center" }}>
+          <TapTarget
+            label={COPY.probe.listenAgain}
+            disabled={disabled}
+            onActivate={() => promptVoice.speak(probe.character)}
+          >
+            <span>{COPY.probe.listenAgain}</span>
+          </TapTarget>
+        </div>
+      )}
     </div>
   );
 }

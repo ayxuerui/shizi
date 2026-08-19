@@ -8,6 +8,12 @@
 // offline coverage for one of these).
 //
 // Run automatically as part of `npm run build` (see package.json).
+//
+// src/diagnostics/critical-assets.ts's CRITICAL_PRECACHE_PATHS asserts
+// the same set at RUNTIME (against the live `caches` API on a real
+// device) — kept as a separate list rather than a shared import, since
+// this script runs standalone against the built dist/sw.js outside
+// Vite's module graph. If you change one, change the other.
 
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";

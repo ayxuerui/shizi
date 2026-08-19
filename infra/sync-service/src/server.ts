@@ -1,7 +1,14 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { startBackupSchedule } from "./backup.js";
 import { openEventStore } from "./db.js";
-import { handleAssignmentsSync, handleEventsSync, type SyncResponseResult } from "./handle-sync.js";
+import {
+  handleAssignmentsSync,
+  handleEventsSync,
+  handleRatingsSync,
+  type SyncRequestInput,
+  type SyncDeps,
+  type SyncResponseResult,
+} from "./handle-sync.js";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const DB_PATH = process.env.EVENTS_DB_PATH ?? "./data/events.sqlite";
@@ -18,6 +25,12 @@ if (!SYNC_SHARED_TOKEN) {
 
 const store = openEventStore(DB_PATH);
 startBackupSchedule(store, BACKUP_DIR);
+
+const ROUTES: Record<string, (input: SyncRequestInput, deps: SyncDeps) => SyncResponseResult> = {
+  "/events": handleEventsSync,
+  "/assignments": handleAssignmentsSync,
+  "/ratings": handleRatingsSync,
+};
 
 async function readBody(req: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
@@ -39,9 +52,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     return;
   }
 
-  if (req.method === "POST" && (req.url === "/events" || req.url === "/assignments")) {
+  const handler = req.method === "POST" && req.url ? ROUTES[req.url] : undefined;
+  if (handler) {
     const bodyText = await readBody(req);
-    const handler = req.url === "/events" ? handleEventsSync : handleAssignmentsSync;
     const result = handler(
       { authHeader: req.headers.authorization, bodyText },
       { expectedToken: SYNC_SHARED_TOKEN as string, store },

@@ -16,7 +16,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { exportToJsonl } from "@shizi/learner-state";
+import { exportToJsonl, toJsonl } from "@shizi/learner-state";
 import { openEventStore } from "../src/db.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -32,12 +32,23 @@ if (!existsSync(dbPath)) {
 
 const store = openEventStore(dbPath);
 const events = store.getAllEvents();
+const ratings = store.getAllRatings();
 store.close();
 
 const outDir = join(repoRoot, "data", "events");
 mkdirSync(outDir, { recursive: true });
-const outPath = join(outDir, "events.jsonl");
-writeFileSync(outPath, exportToJsonl(events));
 
-console.log(`Wrote ${events.length} events to ${outPath}`);
-console.log("Remember to commit this file — it's the actual durable backup, not the live SQLite file.");
+const eventsPath = join(outDir, "events.jsonl");
+writeFileSync(eventsPath, exportToJsonl(events));
+
+// adaptivity-instrumentation spec's "Parent one-tap session rating" — a
+// rating that reaches SQLite but never this file is NOT durably
+// persisted by this repo's own definition (see design.md/infra/README.md:
+// the committed JSONL, not the live SQLite volume, is the actual durable
+// backup).
+const ratingsPath = join(outDir, "ratings.jsonl");
+writeFileSync(ratingsPath, toJsonl(ratings));
+
+console.log(`Wrote ${events.length} events to ${eventsPath}`);
+console.log(`Wrote ${ratings.length} ratings to ${ratingsPath}`);
+console.log("Remember to commit these files — they're the actual durable backup, not the live SQLite file.");

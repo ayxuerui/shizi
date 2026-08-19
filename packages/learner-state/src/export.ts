@@ -1,24 +1,32 @@
 import type { LearnerEvent } from "./types.js";
 
 /**
- * Serializes events to newline-delimited JSON, per `learner-state`
- * spec's "Durable repo-side export" requirement — a version-controlled,
- * human-inspectable format independent of hosted-database storage.
- *
- * Storage-agnostic on purpose: this is the reusable core. Task 9.5's
- * D1-specific pull script (which doesn't exist until Section 9's
- * Cloudflare infra is provisioned) is expected to fetch events from D1
- * and call this function — this function itself has no dependency on
- * where the events came from.
+ * Serializes any list of records to newline-delimited JSON — storage-
+ * agnostic, no dependency on where the records came from. Originally
+ * written for `LearnerEvent` only (per `learner-state` spec's "Durable
+ * repo-side export" requirement); generalized once a second caller
+ * (`offline/sync.ts`'s assignment serializer) and a third (session
+ * ratings, `adaptivity-instrumentation`'s one-tap rating requirement)
+ * needed the identical shape — see `exportToJsonl`/`toJsonl` below.
  */
-export function exportToJsonl(events: readonly LearnerEvent[]): string {
-  return events.map((event) => JSON.stringify(event)).join("\n") + (events.length > 0 ? "\n" : "");
+export function toJsonl<T>(records: readonly T[]): string {
+  return records.map((record) => JSON.stringify(record)).join("\n") + (records.length > 0 ? "\n" : "");
 }
 
-/** Inverse of exportToJsonl, for re-loading an exported file (e.g. in tests, or Section 9's replay tooling). */
-export function parseJsonl(contents: string): LearnerEvent[] {
+/** Inverse of `toJsonl`, for re-loading an exported file (e.g. in tests, or Section 9's replay tooling). */
+export function fromJsonl<T>(contents: string): T[] {
   return contents
     .split("\n")
     .filter((line) => line.trim().length > 0)
-    .map((line) => JSON.parse(line) as LearnerEvent);
+    .map((line) => JSON.parse(line) as T);
+}
+
+/** Typed alias kept for existing call sites and the spec's own wording ("Durable repo-side export" of events). */
+export function exportToJsonl(events: readonly LearnerEvent[]): string {
+  return toJsonl(events);
+}
+
+/** Typed alias of `fromJsonl`, kept for existing call sites. */
+export function parseJsonl(contents: string): LearnerEvent[] {
+  return fromJsonl<LearnerEvent>(contents);
 }

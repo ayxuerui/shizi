@@ -63,4 +63,39 @@ describe("createPointerGate (assessment spec: 'Touch and stylus input support')"
     gate.onPointerDown({ pointerId: 1, pointerType: "pen" });
     expect(gate.shouldAccept({ pointerId: 2, pointerType: "mouse" })).toBe(true);
   });
+
+  it("subscribe reports a rejected decision with penActive: true (diagnostics observability)", () => {
+    const gate = createPointerGate();
+    const records: unknown[] = [];
+    gate.subscribe((record) => records.push(record));
+
+    gate.onPointerDown({ pointerId: 1, pointerType: "pen" });
+    gate.shouldAccept({ pointerId: 2, pointerType: "touch" });
+
+    expect(records).toContainEqual(
+      expect.objectContaining({ phase: "decide", pointerType: "touch", accepted: false, penActive: true }),
+    );
+  });
+
+  it("subscribe's unsubscribe function stops further notifications", () => {
+    const gate = createPointerGate();
+    const records: unknown[] = [];
+    const unsubscribe = gate.subscribe((record) => records.push(record));
+    unsubscribe();
+
+    gate.onPointerDown({ pointerId: 1, pointerType: "pen" });
+    gate.shouldAccept({ pointerId: 2, pointerType: "touch" });
+
+    expect(records).toEqual([]);
+  });
+
+  it("a throwing listener does not break shouldAccept's own return value", () => {
+    const gate = createPointerGate();
+    gate.subscribe(() => {
+      throw new Error("diagnostics bug");
+    });
+
+    expect(() => gate.shouldAccept({ pointerId: 1, pointerType: "touch" })).not.toThrow();
+    expect(gate.shouldAccept({ pointerId: 1, pointerType: "touch" })).toBe(true);
+  });
 });

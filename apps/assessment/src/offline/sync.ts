@@ -1,16 +1,18 @@
-import { exportToJsonl } from "@shizi/learner-state";
-import type { ArmAssignment } from "@shizi/adaptivity";
+import { exportToJsonl, toJsonl } from "@shizi/learner-state";
+import type { ArmAssignment, SessionRating } from "@shizi/adaptivity";
 import { getSyncConfig } from "./endpoint.js";
 import {
   listPendingAssignments,
   listPendingEvents,
+  listPendingRatings,
   markAssignmentsSynced,
   markEventsSynced,
+  markRatingsSynced,
 } from "./event-queue.js";
 
 export type FlushResult =
   | { status: "skipped"; reason: string }
-  | { status: "flushed"; eventsCount: number; assignmentsCount: number }
+  | { status: "flushed"; eventsCount: number; assignmentsCount: number; ratingsCount: number }
   | { status: "failed"; reason: string };
 
 export interface FlushDeps {
@@ -19,7 +21,11 @@ export interface FlushDeps {
 }
 
 function serializeAssignments(assignments: readonly ArmAssignment[]): string {
-  return assignments.map((a) => JSON.stringify(a)).join("\n") + (assignments.length > 0 ? "\n" : "");
+  return toJsonl(assignments);
+}
+
+function serializeRatings(ratings: readonly SessionRating[]): string {
+  return toJsonl(ratings);
 }
 
 async function postNdjson(
@@ -39,16 +45,16 @@ async function postNdjson(
 }
 
 /**
- * Opportunistic flush of the local outbox (both events AND assignments —
- * task 9.2's sync-service exposes /events and /assignments as two
- * sibling routes, `config.endpoint` is their shared base URL) to the
- * self-hosted sync endpoint (design.md: Cloudflare Pages/Worker/D1 →
- * self-hosted, see that decision entry). Per `assessment` spec's "Full
- * offline operation" requirement — NEVER throws. Any failure (no
- * endpoint configured, offline, non-2xx response, a thrown fetch) leaves
- * the queue exactly as it was, to be retried on the next opportunity,
- * and is invisible to the child: nothing here should ever surface as a
- * UI error.
+ * Opportunistic flush of the local outbox (events, assignments, AND
+ * session ratings — task 9.2's sync-service exposes /events,
+ * /assignments, and /ratings as three sibling routes, `config.endpoint`
+ * is their shared base URL) to the self-hosted sync endpoint (design.md:
+ * Cloudflare Pages/Worker/D1 → self-hosted, see that decision entry).
+ * Per `assessment` spec's "Full offline operation" requirement — NEVER
+ * throws. Any failure (no endpoint configured, offline, non-2xx
+ * response, a thrown fetch) leaves the queue exactly as it was, to be
+ * retried on the next opportunity, and is invisible to the child:
+ * nothing here should ever surface as a UI error.
  */
 export async function flushQueue(deps: FlushDeps = {}): Promise<FlushResult> {
   const fetchImpl = deps.fetchImpl ?? fetch;
@@ -63,12 +69,13 @@ export async function flushQueue(deps: FlushDeps = {}): Promise<FlushResult> {
   }
 
   try {
-    const [pendingEvents, pendingAssignments] = await Promise.all([
+    const [pendingEvents, pendingAssignments, pendingRatings] = await Promise.all([
       listPendingEvents(),
       listPendingAssignments(),
+      listPendingRatings(),
     ]);
 
-    if (pendingEvents.length === 0 && pendingAssignments.length === 0) {
+    if (pendingEvents.length === 0 && pendingAssignments.length === 0 && pendingRatings.length === 0) {
       return { status: "skipped", reason: "nothing pending" };
     }
 
@@ -94,10 +101,22 @@ export async function flushQueue(deps: FlushDeps = {}): Promise<FlushResult> {
       await markAssignmentsSynced(pendingAssignments.map((p) => p.key));
     }
 
+    if (pendingRatings.length > 0) {
+      const response = await postNdjson(
+        fetchImpl,
+        `${config.endpoint}/ratings`,
+        config.token,
+        serializeRatings(pendingRatings),
+      );
+      if (!response.ok) return { status: "failed", reason: `ratings HTTP ${response.status}` };
+      await markRatingsSynced(pendingRatings.map((rating) => rating.sessionId));
+    }
+
     return {
       status: "flushed",
       eventsCount: pendingEvents.length,
       assignmentsCount: pendingAssignments.length,
+      ratingsCount: pendingRatings.length,
     };
   } catch (error) {
     return { status: "failed", reason: error instanceof Error ? error.message : String(error) };

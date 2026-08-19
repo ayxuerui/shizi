@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { __resetAudioUnlockForTests, unlockAudio } from "./audio-unlock.js";
+import { __resetAudioUnlockForTests, audioUnlockStatus, unlockAudio } from "./audio-unlock.js";
 import { __resetSharedAudioContextForTests } from "./shared-context.js";
 
 function fakeAudioContext(initialState: AudioContextState = "suspended") {
@@ -89,5 +89,33 @@ describe("unlockAudio (design.md: 'Audio unlock requires an HTMLMediaElement, no
       delay: async () => {},
     });
     expect(result).toBe(context);
+  });
+
+  it("audioUnlockStatus reflects not-attempted, in-flight, then unlocked", async () => {
+    expect(audioUnlockStatus()).toBe("not-attempted");
+
+    const promise = unlockAudio({
+      createAudioContext: () => fakeAudioContext(),
+      audioElement: { currentTime: 0, play: vi.fn(async () => {}) },
+      delay: async () => {},
+    });
+    expect(audioUnlockStatus()).toBe("in-flight");
+
+    await promise;
+    expect(audioUnlockStatus()).toBe("unlocked");
+  });
+
+  it("audioUnlockStatus reports failed if the sequence rejects, without swallowing the rejection", async () => {
+    const audioElement = {
+      currentTime: 0,
+      play: vi.fn(async () => {
+        throw new Error("blocked by platform");
+      }),
+    };
+
+    await expect(
+      unlockAudio({ createAudioContext: () => fakeAudioContext(), audioElement, delay: async () => {} }),
+    ).rejects.toThrow("blocked by platform");
+    expect(audioUnlockStatus()).toBe("failed");
   });
 });

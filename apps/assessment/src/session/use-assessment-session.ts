@@ -7,8 +7,8 @@ import {
 } from "@shizi/assessment-engine";
 import type { CandidatePool } from "@shizi/character-data";
 import type { LearnerEvent } from "@shizi/learner-state";
-import type { ArmAssignment } from "@shizi/adaptivity";
-import { enqueueAssignments, enqueueEvent, loadPriorEvents } from "../offline/event-queue.js";
+import type { ArmAssignment, Rating, SessionRating } from "@shizi/adaptivity";
+import { enqueueAssignments, enqueueEvent, enqueueRating, loadPriorEvents } from "../offline/event-queue.js";
 import { flushQueue } from "../offline/sync.js";
 import { boutReducer, INITIAL_BOUT_STATE, type BoutState } from "./bout-machine.js";
 
@@ -27,6 +27,11 @@ async function defaultOnAssignments(assignments: readonly ArmAssignment[]): Prom
   await enqueueAssignments(assignments);
 }
 
+async function defaultOnRating(rating: SessionRating): Promise<void> {
+  await enqueueRating(rating);
+  void flushQueue(); // fire-and-forget, same discipline as defaultOnEvent.
+}
+
 export interface UseAssessmentSessionOptions {
   sessionId: string;
   pool: CandidatePool;
@@ -39,12 +44,13 @@ export interface UseAssessmentSessionOptions {
   nowMs?: () => number;
   onEvent?: (event: LearnerEvent) => void | Promise<void>;
   onAssignments?: (assignments: readonly ArmAssignment[]) => void | Promise<void>;
+  onRating?: (rating: SessionRating) => void | Promise<void>;
 }
 
 export interface UseAssessmentSessionResult {
   state: BoutState;
   submitResponse: (selected: string) => void;
-  rate: () => void;
+  rate: (rating: Rating) => void;
   skipRating: () => void;
 }
 
@@ -70,6 +76,7 @@ export function useAssessmentSession(options: UseAssessmentSessionOptions): UseA
     nowMs = () => performance.now(),
     onEvent = defaultOnEvent,
     onAssignments = defaultOnAssignments,
+    onRating = defaultOnRating,
   } = options;
 
   const [state, dispatch] = useReducer(boutReducer, INITIAL_BOUT_STATE);
@@ -166,7 +173,11 @@ export function useAssessmentSession(options: UseAssessmentSessionOptions): UseA
     }, RESOLVE_DELAY_MS);
   }
 
-  function rate(): void {
+  function rate(rating: Rating): void {
+    // Same shape as submitResponse: the side effect runs directly (not
+    // through the reducer, which stays a pure phase-transition machine),
+    // then a payload-less action just settles ratingPhase.
+    void onRating({ sessionId, rating, recordedAt: new Date().toISOString() });
     dispatch({ type: "RATED" });
   }
 
