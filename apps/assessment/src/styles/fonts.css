@@ -1,0 +1,15 @@
+/**
+ * The real, license-cleared, committed font subset — see
+ * `scripts/build-font-subset.ts` and `public/fonts/subset-manifest.json`
+ * for provenance. `font-display: block` is deliberate: a brief blank
+ * (rather than a fallback-font flash-then-swap) is the better failure
+ * mode for a beginning reader who hasn't learned to recognize a
+ * character's shape in more than one typeface yet.
+ */
+@font-face {
+  font-family: "LXGW WenKai Subset";
+  src: url("/fonts/LXGWWenKai-subset.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}

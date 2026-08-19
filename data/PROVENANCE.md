@@ -50,12 +50,23 @@ verification; per design.md, this is a go/no-go gate before Section 3
      using it as-is/subset, not renaming or re-releasing it as a distinct
      font.
   3. Must include `OFL.txt` when redistributing the font file.
-  4. **Directly on point:** the project's own README explicitly carves out
-     web-font subsetting/format-conversion (exactly our case — a subset
-     for the app and the future print pipeline) as a case where the
-     reserved-name restriction doesn't block normal use.
-  - **Action for Section 3/8:** include `OFL.txt` alongside the subset font
-    file shipped in the app bundle.
+  4. **Directly on point, verified directly (not just paraphrased) in
+     Section 8:** OFL 1.1's own terms already permit this without a
+     special carve-out — the reserved-name restriction (condition 2
+     above) only applies to a *renamed* derivative with modified glyph
+     designs; subsetting (removing glyphs, not altering the retained
+     ones) isn't that. The upstream repo's README additionally points
+     implementers at a recommended webfont-conversion package
+     ([GitHub Issue #24](https://github.com/lxgw/LxgwWenKai/issues/24)) —
+     useful practical guidance, not itself a distinct license grant.
+  - **Action for Section 3/8 — DONE:** `apps/assessment/scripts/build-font-subset.ts`
+    subsets the real LXGW WenKai (Regular, release v1.522 — the exact
+    source this verification names, not the separate "Lite" repo the P0
+    spike used for convenience) to this project's candidate pool +
+    identity set + UI copy + ASCII/punctuation (305 characters, 60KB
+    output). `OFL.txt` and a `subset-manifest.json` change-note (mirroring
+    Make Me a Hanzi's `CHANGES.md` precedent) ship alongside it in
+    `apps/assessment/public/fonts/`.
 
 ## CC-CEDICT — glosses
 
@@ -98,13 +109,13 @@ the datasets above.
 | Dataset | License | Verdict | Real conditions? |
 |---|---|---|---|
 | Make Me a Hanzi (`graphics.txt`) | Arphic Public License | GO | Yes — retain license file, note modifications, keep changes publicly available |
-| LXGW WenKai | SIL OFL 1.1 | GO | Minor — include `OFL.txt`, don't rename |
+| LXGW WenKai | SIL OFL 1.1 | GO | Minor — include `OFL.txt`, don't rename. **Integrated in Section 8** — see `apps/assessment/public/fonts/`. |
 | CC-CEDICT | CC BY-SA 3.0 | GO | Yes — attribution, share-alike, note changes. **Not yet integrated** — no glosses/pinyin used anywhere as of Section 3. |
 | HSK 3.0 charlist | MIT | GO | None beyond standard MIT notice; not redistributed, used as a curation input only |
 
 All four clear the gate. Make Me a Hanzi's Arphic-license actions are
 fulfilled as of Section 3 (`packages/character-data/src/data/ARPHICPL.TXT`
-+ `CHANGES.md`). LXGW WenKai's and CC-CEDICT's actions remain open until
-those datasets are actually integrated (Section 8 for the font; whenever
-glosses are first used for CC-CEDICT) — tracked as explicit tasks, not
-left implicit.
++ `CHANGES.md`), and LXGW WenKai's are now fulfilled as of Section 8
+(`apps/assessment/public/fonts/`). CC-CEDICT's action remains open until
+glosses are first actually used — tracked as an explicit task, not left
+implicit.

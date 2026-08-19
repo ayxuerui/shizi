@@ -10,6 +10,8 @@
   },
   "include": ["src"],
   "references": [
+    { "path": "../../packages/adaptivity" },
+    { "path": "../../packages/assessment-engine" },
     { "path": "../../packages/character-data" },
     { "path": "../../packages/curriculum" },
     { "path": "../../packages/learner-state" },
