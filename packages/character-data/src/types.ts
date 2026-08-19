@@ -16,6 +16,16 @@ export interface StrokeData {
 export type Concreteness = "concrete" | "abstract";
 
 /**
+ * Distinguishes a manually-reviewed tag from a generated draft one, per
+ * `character-data` spec's "Human-supplied concreteness tag" scenario: a
+ * manually supplied tag is authoritative, so a generated draft — however
+ * carefully generated — must not be silently presented as one. Applies
+ * to `concreteness`/`pictographic` jointly (see
+ * `scripts/build-tags.mjs`); there is no per-field split.
+ */
+export type TagSource = "draft" | "reviewed";
+
+/**
  * Per-character attributes. Fields are nullable because they are meant to
  * be filled in independently over time (stroke data mechanically, from
  * Make Me a Hanzi; concreteness/pictographic by hand — see
@@ -34,10 +44,15 @@ export interface CharacterAttributes {
    * sourced for them.
    */
   frequencyRank: number | null;
-  /** Human-tagged. Null until a hand-tagging pass supplies it (task 3.3). */
+  /** Human-tagged (task 3.3). Provisionally populated from a generated
+   * draft (`tagSource: "draft"`) pending the parent's review — see
+   * `scripts/build-tags.mjs`. Null only for characters absent from
+   * `data/tagging-review.csv` entirely. */
   concreteness: Concreteness | null;
-  /** Human-tagged. Null until a hand-tagging pass supplies it (task 3.3). */
+  /** Human-tagged (task 3.3). See `concreteness` above — same draft/null caveat applies. */
   pictographic: boolean | null;
+  /** "draft" until the parent's hand-review lands; null if untagged at all. */
+  tagSource: TagSource | null;
   strokeCount: number | null;
   strokeData: StrokeData | null;
   /**

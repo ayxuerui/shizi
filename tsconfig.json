@@ -5,6 +5,7 @@
     { "path": "./packages/curriculum" },
     { "path": "./packages/validator" },
     { "path": "./packages/learner-state" },
-    { "path": "./packages/adaptivity" }
+    { "path": "./packages/adaptivity" },
+    { "path": "./packages/assessment-engine" }
   ]
 }

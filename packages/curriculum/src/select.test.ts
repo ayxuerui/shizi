@@ -22,13 +22,25 @@ describe("selectNextCharacter", () => {
     expect(result).toEqual({ status: "phase-a", character: PHASE_A_SEQUENCE[0] });
   });
 
-  // The base pool has nothing usable yet (task 3.3's hand-tagging hasn't
-  // happened — see exclusion.ts), so phase-b tests need at least one
-  // character deliberately marked usable. "谢" is confirmed not in
-  // Phase A or the identity set, so it's safe to use as a stand-in.
+  // The real pool now carries draft concreteness/pictographic tags
+  // (task 3.3's draft pass) for nearly every character, which would make
+  // phase-b test setup nondeterministic and hard to control — many
+  // candidates would compete for top score. These tests need exactly one
+  // controlled, usable, non-Phase-A, non-identity candidate, so this
+  // helper masks every other character back to "untagged" (the
+  // pre-review state exclusion.ts still describes) and guarantees the
+  // target is usable. "谢" is confirmed not in Phase A or the identity
+  // set, so it's safe to use as that stand-in.
   function withOneUsableCandidate(character: string): typeof pool {
     const modified = new Map(pool);
-    modified.set(character, { ...modified.get(character)!, concreteness: "concrete", pictographic: false });
+    for (const [key, entry] of modified) {
+      modified.set(
+        key,
+        key === character
+          ? { ...entry, concreteness: "concrete", pictographic: false, tagSource: "reviewed" }
+          : { ...entry, concreteness: null, pictographic: null, tagSource: null },
+      );
+    }
     return modified;
   }
 

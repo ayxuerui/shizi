@@ -9,6 +9,7 @@ function attrs(character: string, overrides: Partial<CharacterAttributes> = {}):
     frequencyRank: 100,
     concreteness: "concrete",
     pictographic: false,
+    tagSource: "reviewed",
     strokeCount: 5,
     strokeData: null,
     personalRelevance: 0,

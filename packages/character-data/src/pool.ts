@@ -1,6 +1,7 @@
-import type { CandidatePool, CharacterAttributes, StrokeData } from "./types.js";
+import type { CandidatePool, CharacterAttributes, StrokeData, TagSource } from "./types.js";
 import poolMembership from "./data/pool-membership.js";
 import strokeDataRaw from "./data/stroke-data.js";
+import tagsRaw from "./data/tags.js";
 import { IDENTITY_SET } from "./data/identity-set.js";
 
 interface PoolMembershipFile {
@@ -19,8 +20,15 @@ interface RawStrokeEntry {
   medians: number[][][];
 }
 
+interface RawTagEntry {
+  concreteness: "concrete" | "abstract";
+  pictographic: boolean;
+  tagSource: TagSource;
+}
+
 const membership = poolMembership as PoolMembershipFile;
 const strokeData = strokeDataRaw as Record<string, RawStrokeEntry>;
+const tags = tagsRaw as Record<string, RawTagEntry>;
 
 function toMedianTuples(medians: number[][][]): Array<Array<[number, number]>> {
   return medians.map((stroke) =>
@@ -73,15 +81,20 @@ function buildAttributes(character: string): CharacterAttributes {
   const strokeDataEntry: StrokeData | null = raw
     ? { strokes: raw.strokes, medians: toMedianTuples(raw.medians) }
     : null;
+  // Human-tagged field (task 3.3), provisionally populated from a
+  // generated draft (see data/tagging-review.csv,
+  // scripts/build-tags.mjs) pending the parent's review. tagSource is
+  // what keeps "draft" from being silently read as authoritative — see
+  // exclusion.ts for what still gates on this being present at all
+  // (it doesn't gate on tagSource; a draft tag is a real, usable value).
+  const tag = tags[character];
 
   return {
     character,
     frequencyRank: membership.frequencyRank[character] ?? null,
-    // Human-tagged; not yet supplied (task 3.3). See exclusion.ts — a
-    // character missing this is correctly excluded from selection until
-    // a hand-tagging pass fills it in, not a bug.
-    concreteness: null,
-    pictographic: null,
+    concreteness: tag?.concreteness ?? null,
+    pictographic: tag?.pictographic ?? null,
+    tagSource: tag?.tagSource ?? null,
     strokeCount: strokeDataEntry ? strokeDataEntry.strokes.length : null,
     strokeData: strokeDataEntry,
     personalRelevance: PERSONAL_RELEVANCE.get(character) ?? 0,
