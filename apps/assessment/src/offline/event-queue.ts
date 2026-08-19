@@ -34,10 +34,40 @@ export async function listPendingEvents(): Promise<LearnerEvent[]> {
   return all.filter((stored) => !stored.synced).map((stored) => stored.event);
 }
 
-export async function listPendingAssignments(): Promise<ArmAssignment[]> {
+export interface PendingAssignment {
+  /** The assignments store's autoIncrement key — needed to mark exactly
+   * these rows synced afterward, since ArmAssignment itself has no
+   * natural unique field (see db.ts's doc comment). */
+  key: number;
+  assignment: ArmAssignment;
+}
+
+export async function listPendingAssignments(): Promise<PendingAssignment[]> {
   const db = await getDB();
-  const all = await db.getAll("assignments");
-  return all.filter((stored) => !stored.synced).map((stored) => stored.assignment);
+  const [allValues, allKeys] = await Promise.all([
+    db.getAll("assignments"),
+    db.getAllKeys("assignments"),
+  ]);
+  const pending: PendingAssignment[] = [];
+  for (let i = 0; i < allValues.length; i++) {
+    if (!allValues[i]!.synced) {
+      pending.push({ key: allKeys[i]!, assignment: allValues[i]!.assignment });
+    }
+  }
+  return pending;
+}
+
+export async function markAssignmentsSynced(keys: readonly number[]): Promise<void> {
+  if (keys.length === 0) return;
+  const db = await getDB();
+  const tx = db.transaction("assignments", "readwrite");
+  await Promise.all([
+    ...keys.map(async (key) => {
+      const existing = await tx.store.get(key);
+      if (existing) await tx.store.put({ ...existing, synced: true }, key);
+    }),
+    tx.done,
+  ]);
 }
 
 export async function markEventsSynced(ids: readonly string[]): Promise<void> {

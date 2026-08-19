@@ -5,10 +5,16 @@
  * (rather than a fallback-font flash-then-swap) is the better failure
  * mode for a beginning reader who hasn't learned to recognize a
  * character's shape in more than one typeface yet.
+ *
+ * Path is hardcoded to /assessment/ (vite.config.ts's `base`): this file is
+ * a plain CSS side-effect import, not a module Vite resolves the referenced
+ * asset through, and Vite does not rewrite hand-written absolute `url()`
+ * references to public/ files when `base` isn't "/" — the developer is
+ * expected to write the deployed path directly.
  */
 @font-face {
   font-family: "LXGW WenKai Subset";
-  src: url("/fonts/LXGWWenKai-subset.woff2") format("woff2");
+  src: url("/assessment/fonts/LXGWWenKai-subset.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: block;

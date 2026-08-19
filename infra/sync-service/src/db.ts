@@ -1,0 +1,167 @@
+import DatabaseConstructor, { type Database } from "better-sqlite3";
+import type { LearnerEvent } from "@shizi/learner-state";
+import type { ArmAssignment } from "@shizi/adaptivity";
+
+/**
+ * Task 9.2's event store, self-hosted SQLite instead of Cloudflare D1 —
+ * see design.md's "Cloudflare Pages/Worker/D1 → self-hosted" decision
+ * entry for why. D1 itself is managed SQLite, so this schema and the
+ * idempotency approach (INSERT OR IGNORE, keyed on the same `id` the
+ * client's own `EventLog` already treats as the idempotency key) would
+ * carry over unchanged if this ever did move to a real D1 instance.
+ */
+const SCHEMA = `
+CREATE TABLE IF NOT EXISTS events (
+  id TEXT PRIMARY KEY,
+  timestamp TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  character TEXT NOT NULL,
+  modality TEXT NOT NULL,
+  outcome TEXT NOT NULL,
+  latency_ms INTEGER NOT NULL,
+  position_in_session INTEGER NOT NULL,
+  prior_exposure_count INTEGER NOT NULL,
+  days_since_last_exposure REAL,
+  time_of_day INTEGER NOT NULL,
+  adult_present INTEGER NOT NULL,
+  received_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE TABLE IF NOT EXISTS assignments (
+  row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  character TEXT NOT NULL,
+  arm TEXT NOT NULL,
+  pair_id TEXT NOT NULL,
+  assigned_at TEXT NOT NULL,
+  received_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  UNIQUE (character, pair_id)
+);
+`;
+
+interface EventRow {
+  id: string;
+  timestamp: string;
+  session_id: string;
+  character: string;
+  modality: string;
+  outcome: string;
+  latency_ms: number;
+  position_in_session: number;
+  prior_exposure_count: number;
+  days_since_last_exposure: number | null;
+  time_of_day: number;
+  adult_present: number;
+}
+
+interface AssignmentRow {
+  row_id: number;
+  character: string;
+  arm: string;
+  pair_id: string;
+  assigned_at: string;
+}
+
+function rowToEvent(row: EventRow): LearnerEvent {
+  return {
+    id: row.id,
+    timestamp: row.timestamp,
+    sessionId: row.session_id,
+    character: row.character,
+    modality: row.modality,
+    outcome: row.outcome as LearnerEvent["outcome"],
+    latencyMs: row.latency_ms,
+    positionInSession: row.position_in_session,
+    priorExposureCount: row.prior_exposure_count,
+    daysSinceLastExposure: row.days_since_last_exposure,
+    timeOfDay: row.time_of_day,
+    adultPresent: row.adult_present === 1,
+  };
+}
+
+function rowToAssignment(row: AssignmentRow): ArmAssignment {
+  return {
+    character: row.character,
+    arm: row.arm,
+    pairId: row.pair_id,
+    assignedAt: row.assigned_at,
+  };
+}
+
+export interface EventStore {
+  insertEvent(event: LearnerEvent): { inserted: boolean };
+  insertAssignment(assignment: ArmAssignment): { inserted: boolean };
+  getAllEvents(): LearnerEvent[];
+  getAllAssignments(): ArmAssignment[];
+  backup(destinationPath: string): Promise<void>;
+  close(): void;
+}
+
+export function openEventStore(path: string): EventStore {
+  const db: Database = new DatabaseConstructor(path);
+  db.pragma("journal_mode = WAL");
+  db.exec(SCHEMA);
+
+  const insertEventStmt = db.prepare(`
+    INSERT OR IGNORE INTO events
+      (id, timestamp, session_id, character, modality, outcome, latency_ms,
+       position_in_session, prior_exposure_count, days_since_last_exposure,
+       time_of_day, adult_present)
+    VALUES (@id, @timestamp, @sessionId, @character, @modality, @outcome, @latencyMs,
+            @positionInSession, @priorExposureCount, @daysSinceLastExposure,
+            @timeOfDay, @adultPresent)
+  `);
+
+  const insertAssignmentStmt = db.prepare(`
+    INSERT OR IGNORE INTO assignments (character, arm, pair_id, assigned_at)
+    VALUES (@character, @arm, @pairId, @assignedAt)
+  `);
+
+  const selectEventsStmt = db.prepare(`SELECT * FROM events ORDER BY timestamp ASC, id ASC`);
+  const selectAssignmentsStmt = db.prepare(`SELECT * FROM assignments ORDER BY row_id ASC`);
+
+  return {
+    insertEvent(event) {
+      const result = insertEventStmt.run({
+        id: event.id,
+        timestamp: event.timestamp,
+        sessionId: event.sessionId,
+        character: event.character,
+        modality: event.modality,
+        outcome: event.outcome,
+        latencyMs: event.latencyMs,
+        positionInSession: event.positionInSession,
+        priorExposureCount: event.priorExposureCount,
+        daysSinceLastExposure: event.daysSinceLastExposure,
+        timeOfDay: event.timeOfDay,
+        adultPresent: event.adultPresent ? 1 : 0,
+      });
+      return { inserted: result.changes > 0 };
+    },
+
+    insertAssignment(assignment) {
+      const result = insertAssignmentStmt.run({
+        character: assignment.character,
+        arm: assignment.arm,
+        pairId: assignment.pairId,
+        assignedAt: assignment.assignedAt,
+      });
+      return { inserted: result.changes > 0 };
+    },
+
+    getAllEvents() {
+      return (selectEventsStmt.all() as EventRow[]).map(rowToEvent);
+    },
+
+    getAllAssignments() {
+      return (selectAssignmentsStmt.all() as AssignmentRow[]).map(rowToAssignment);
+    },
+
+    async backup(destinationPath) {
+      await db.backup(destinationPath);
+    },
+
+    close() {
+      db.close();
+    },
+  };
+}

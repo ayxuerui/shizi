@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { AssessmentSessionConfig } from "@shizi/assessment-engine";
+import type { CandidatePool } from "@shizi/character-data";
 import { ClosingBeat } from "../closing/ClosingBeat.js";
 import { useInteractionSound } from "../feedback/use-interaction-sound.js";
 import { NarrativeStage } from "../narrative/NarrativeStage.js";
@@ -8,9 +9,12 @@ import { loadCandidatePool } from "../session/pool.js";
 import { useAssessmentSession } from "../session/use-assessment-session.js";
 
 export interface BoutScreenProps {
-  /** Overridable only for tests (e.g. a tiny `maxItems` to reach
-   * `session-complete` quickly) — real usage always uses the engine's
-   * own default. */
+  /** Overridable for real usage (task 9.4's published `config.json`, via
+   * `App.tsx`) and for tests (e.g. a tiny `maxItems` to reach
+   * `session-complete` quickly). Defaults to the bundled pool/engine
+   * default when omitted, so every existing test that constructs
+   * `<BoutScreen>` with no props keeps working unchanged. */
+  pool?: CandidatePool;
   config?: AssessmentSessionConfig;
 }
 
@@ -20,9 +24,9 @@ export interface BoutScreenProps {
  * takes over once the session completes. All the actual state lives in
  * `useAssessmentSession` — this component just maps `BoutState` to markup.
  */
-export function BoutScreen({ config }: BoutScreenProps = {}) {
+export function BoutScreen({ pool: poolProp, config }: BoutScreenProps = {}) {
   const sessionId = useMemo(() => crypto.randomUUID(), []);
-  const pool = useMemo(() => loadCandidatePool(), []);
+  const pool = useMemo(() => poolProp ?? loadCandidatePool(), [poolProp]);
   const { state, submitResponse, rate, skipRating } = useAssessmentSession({
     sessionId,
     pool,

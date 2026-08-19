@@ -28,18 +28,19 @@ function tap(element: HTMLElement): void {
   });
 }
 
-describe("App (task 8.3: first-gesture audio-unlock screen)", () => {
+describe("App (task 8.3: first-gesture audio-unlock screen; task 9.4: published-config bootstrap)", () => {
   beforeEach(resetDatabase);
   afterEach(resetDatabase);
 
-  it("shows the unlock screen before anything else", () => {
+  it("shows the unlock screen once the published-config bootstrap resolves (falls back to the bundled pool in jsdom, where /config.json isn't fetchable)", async () => {
     render(<App />);
-    expect(screen.getByRole("button", { name: "点一下开始" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "点一下开始" })).toBeInTheDocument();
   });
 
   it("proceeds to the assessment after the unlock tap", async () => {
     render(<App />);
-    tap(screen.getByRole("button", { name: "点一下开始" }));
+    const unlockButton = await screen.findByRole("button", { name: "点一下开始" });
+    tap(unlockButton);
 
     expect(await screen.findByTestId("wukong")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "点一下开始" })).not.toBeInTheDocument();

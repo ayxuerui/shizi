@@ -15,6 +15,11 @@ coverage/
 # Cloudflare
 .wrangler/
 
+# Self-hosted sync-service local runtime data (live SQLite DB + backup
+# snapshots) — never committed. The durable, versioned backup is
+# data/events/events.jsonl (see infra/sync-service/scripts/pull-events.ts).
+infra/sync-service/data/
+
 # Editor
 .vscode/*
 !.vscode/extensions.json

@@ -5,8 +5,9 @@
   "type": "module",
   "description": "Help Eliana learn to read Chinese characters",
   "workspaces": [
+    "packages/*",
     "apps/*",
-    "packages/*"
+    "infra/*"
   ],
   "engines": {
     "node": ">=20"
