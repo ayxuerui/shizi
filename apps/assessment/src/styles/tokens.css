@@ -1,0 +1,27 @@
+/**
+ * Design tokens shared across every component. Two are load-bearing for
+ * spec requirements, not just style:
+ *
+ * - --tap-min-size / --tap-gap: the "large touch targets" requirement
+ *   (assessment spec: "Touch and stylus input support") — every tap
+ *   target in this app reads these, so the minimum size is enforced in
+ *   exactly one place.
+ * - There is deliberately NO --color-error / --color-danger token here.
+ *   That's not an oversight — see feedback/cues.ts's doc comment. The
+ *   "no visible scoring or failure state" requirement is partly enforced
+ *   by there being no error-red token to reach for in the first place.
+ */
+:root {
+  --font-hanzi: "LXGW WenKai Subset", serif;
+
+  --color-bg: #fff8ee;
+  --color-ink: #3a2f28;
+  --color-accent: #d98c3d; /* warm amber — used for "acknowledge" highlight, not error */
+  --color-surface: #ffffff;
+
+  --tap-min-size: 96px;
+  --tap-gap: 24px;
+
+  --radius-lg: 20px;
+  --shadow-soft: 0 4px 16px rgba(58, 47, 40, 0.12);
+}
