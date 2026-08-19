@@ -1,6 +1,6 @@
 import DatabaseConstructor, { type Database } from "better-sqlite3";
 import type { LearnerEvent } from "@shizi/learner-state";
-import type { ArmAssignment } from "@shizi/adaptivity";
+import type { ArmAssignment, SessionRating } from "@shizi/adaptivity";
 
 /**
  * Task 9.2's event store, self-hosted SQLite instead of Cloudflare D1 —
@@ -35,6 +35,19 @@ CREATE TABLE IF NOT EXISTS assignments (
   assigned_at TEXT NOT NULL,
   received_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   UNIQUE (character, pair_id)
+);
+
+-- adaptivity-instrumentation spec's "Parent one-tap session rating":
+-- session_id is the primary key, not an autoincrement row — a rating is
+-- naturally one-per-session (see SessionRating's doc comment in
+-- packages/adaptivity), so INSERT OR IGNORE on it is the same
+-- idempotent-resync guarantee the events table already gets from its own
+-- natural key.
+CREATE TABLE IF NOT EXISTS ratings (
+  session_id TEXT PRIMARY KEY,
+  rating TEXT NOT NULL,
+  recorded_at TEXT NOT NULL,
+  received_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 `;
 
@@ -87,11 +100,27 @@ function rowToAssignment(row: AssignmentRow): ArmAssignment {
   };
 }
 
+interface RatingRow {
+  session_id: string;
+  rating: string;
+  recorded_at: string;
+}
+
+function rowToRating(row: RatingRow): SessionRating {
+  return {
+    sessionId: row.session_id,
+    rating: row.rating as SessionRating["rating"],
+    recordedAt: row.recorded_at,
+  };
+}
+
 export interface EventStore {
   insertEvent(event: LearnerEvent): { inserted: boolean };
   insertAssignment(assignment: ArmAssignment): { inserted: boolean };
+  insertRating(rating: SessionRating): { inserted: boolean };
   getAllEvents(): LearnerEvent[];
   getAllAssignments(): ArmAssignment[];
+  getAllRatings(): SessionRating[];
   backup(destinationPath: string): Promise<void>;
   close(): void;
 }
@@ -116,8 +145,14 @@ export function openEventStore(path: string): EventStore {
     VALUES (@character, @arm, @pairId, @assignedAt)
   `);
 
+  const insertRatingStmt = db.prepare(`
+    INSERT OR IGNORE INTO ratings (session_id, rating, recorded_at)
+    VALUES (@sessionId, @rating, @recordedAt)
+  `);
+
   const selectEventsStmt = db.prepare(`SELECT * FROM events ORDER BY timestamp ASC, id ASC`);
   const selectAssignmentsStmt = db.prepare(`SELECT * FROM assignments ORDER BY row_id ASC`);
+  const selectRatingsStmt = db.prepare(`SELECT * FROM ratings ORDER BY recorded_at ASC, session_id ASC`);
 
   return {
     insertEvent(event) {
@@ -154,6 +189,19 @@ export function openEventStore(path: string): EventStore {
 
     getAllAssignments() {
       return (selectAssignmentsStmt.all() as AssignmentRow[]).map(rowToAssignment);
+    },
+
+    insertRating(rating) {
+      const result = insertRatingStmt.run({
+        sessionId: rating.sessionId,
+        rating: rating.rating,
+        recordedAt: rating.recordedAt,
+      });
+      return { inserted: result.changes > 0 };
+    },
+
+    getAllRatings() {
+      return (selectRatingsStmt.all() as RatingRow[]).map(rowToRating);
     },
 
     async backup(destinationPath) {

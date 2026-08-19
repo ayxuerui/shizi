@@ -63,12 +63,7 @@ export function BoutScreen({ pool: poolProp, config }: BoutScreenProps = {}) {
         />
       )}
       {(state.phase === "closing" || state.phase === "done") && (
-        <ClosingBeat
-          sessionId={sessionId}
-          ratingPhase={state.ratingPhase}
-          onRate={rate}
-          onSkipRating={skipRating}
-        />
+        <ClosingBeat ratingPhase={state.ratingPhase} onRate={rate} onSkipRating={skipRating} />
       )}
     </div>
   );

@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { DEFAULT_ASSESSMENT_SESSION_CONFIG } from "@shizi/assessment-engine";
 import { __resetDBForTests } from "../offline/db.js";
+import { listPendingRatings } from "../offline/event-queue.js";
+import { COPY } from "../copy.js";
 import { BoutScreen } from "./BoutScreen.js";
 
 async function resetDatabase(): Promise<void> {
@@ -107,5 +109,23 @@ describe("BoutScreen (assessment spec: 'No visible scoring or failure state', 'N
 
     assertNoScoreLikeText();
     expect(screen.queryByRole("button", { name: "跳过" })).not.toBeInTheDocument();
+  });
+
+  it("persists the tapped parent rating to the offline queue, linked to this bout's session (adaptivity-instrumentation spec: 'Parent one-tap session rating')", async () => {
+    render(<BoutScreen config={{ ...DEFAULT_ASSESSMENT_SESSION_CONFIG, maxItems: 1 }} />);
+    const options = await screen.findAllByRole("button", { name: /^[一-鿿]$/ });
+    tap(options[0]!);
+
+    await screen.findByText(/悟空到家了/, {}, { timeout: 3000 });
+    const loved = await screen.findByRole("button", { name: COPY.parentRating.loved });
+    tap(loved);
+
+    await waitFor(async () => {
+      const pending = await listPendingRatings();
+      expect(pending).toHaveLength(1);
+      expect(pending[0]).toMatchObject({ rating: "loved" });
+      expect(pending[0]!.sessionId).toBeTruthy();
+    });
+    assertNoScoreLikeText();
   });
 });

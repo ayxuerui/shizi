@@ -14,4 +14,4 @@ export { computeMasteryStates, DEFAULT_MASTERY_CONFIG } from "./mastery-projecti
 
 export { computeKnownSet } from "./known-set-projection.js";
 
-export { exportToJsonl, parseJsonl } from "./export.js";
+export { exportToJsonl, parseJsonl, toJsonl, fromJsonl } from "./export.js";

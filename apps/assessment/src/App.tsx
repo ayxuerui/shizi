@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { AudioUnlockGate } from "./audio/AudioUnlockGate.js";
 import { BoutScreen } from "./bout/BoutScreen.js";
+import { DiagnosticsScreen } from "./diagnostics/DiagnosticsScreen.js";
+import { clearDiagnosticsHash, isDiagnosticsRequested } from "./diagnostics/entry.js";
 import { loadPublishedConfig, type PublishedConfigResult } from "./session/published-config.js";
 
 /**
@@ -12,6 +14,7 @@ import { loadPublishedConfig, type PublishedConfigResult } from "./session/publi
  */
 export function App() {
   const [published, setPublished] = useState<PublishedConfigResult | null>(null);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(() => isDiagnosticsRequested(window.location));
 
   useEffect(() => {
     let cancelled = false;
@@ -23,6 +26,28 @@ export function App() {
     };
   }, []);
 
+  // This is the app's ONLY URL read (see diagnostics/entry.ts's header
+  // comment) — a #diagnostics hash is a dev/desk-testing convenience in
+  // ordinary Safari; the corner long-press (AudioUnlockGate's
+  // onDiagnosticsRequest below) is the mechanism that also works inside
+  // standalone/home-screen mode, where there's no address bar.
+  useEffect(() => {
+    const onHashChange = (): void => setDiagnosticsOpen(isDiagnosticsRequested(window.location));
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  if (diagnosticsOpen) {
+    return (
+      <DiagnosticsScreen
+        onExit={() => {
+          clearDiagnosticsHash(window);
+          setDiagnosticsOpen(false);
+        }}
+      />
+    );
+  }
+
   if (!published) {
     // Brief — config.json is small and, once fetched once, precached by
     // the service worker like every other public/ asset. Not worth a
@@ -31,7 +56,7 @@ export function App() {
   }
 
   return (
-    <AudioUnlockGate>
+    <AudioUnlockGate onDiagnosticsRequest={() => setDiagnosticsOpen(true)}>
       <BoutScreen pool={published.pool} config={published.config} />
     </AudioUnlockGate>
   );

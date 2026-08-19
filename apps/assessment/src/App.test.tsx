@@ -45,4 +45,21 @@ describe("App (task 8.3: first-gesture audio-unlock screen; task 9.4: published-
     expect(await screen.findByTestId("wukong")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "点一下开始" })).not.toBeInTheDocument();
   });
+
+  it("regression guard: with no hash and no long-press, the DiagnosticsScreen itself is never mounted — only its unlabeled entry affordance is present", async () => {
+    render(<App />);
+    await screen.findByRole("button", { name: "点一下开始" });
+    expect(screen.queryByText(/Diagnostics \(task 10.0/)).not.toBeInTheDocument();
+    // The corner long-press affordance (entry.ts's OTHER mechanism, alongside #diagnostics) is
+    // expected to be present here — it's what makes diagnostics reachable at all from standalone mode.
+    expect(screen.queryByRole("button", { name: "device diagnostics" })).toBeInTheDocument();
+  });
+
+  it("shows the diagnostics screen instead of the unlock gate when #diagnostics is set", async () => {
+    window.location.hash = "#diagnostics";
+    render(<App />);
+    expect(await screen.findByText(/Diagnostics \(task 10.0/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "点一下开始" })).not.toBeInTheDocument();
+    window.location.hash = "";
+  });
 });

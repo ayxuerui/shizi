@@ -12,7 +12,10 @@ export interface AudioUnlockDeps {
   delay: (ms: number) => Promise<void>;
 }
 
+export type AudioUnlockStatus = "not-attempted" | "in-flight" | "unlocked" | "failed";
+
 let unlockPromise: Promise<AudioContext> | null = null;
+let status: AudioUnlockStatus = "not-attempted";
 
 /**
  * Task 8.3's first-gesture audio-unlock sequence, per design.md's "Audio
@@ -37,22 +40,43 @@ let unlockPromise: Promise<AudioContext> | null = null;
 export function unlockAudio(deps: AudioUnlockDeps): Promise<AudioContext> {
   if (unlockPromise) return unlockPromise;
 
+  status = "in-flight";
   unlockPromise = (async () => {
-    deps.audioElement.currentTime = 0;
-    await deps.audioElement.play();
+    try {
+      deps.audioElement.currentTime = 0;
+      await deps.audioElement.play();
 
-    const context = getSharedAudioContext(deps.createAudioContext);
-    await resumeIfSuspended(context);
+      const context = getSharedAudioContext(deps.createAudioContext);
+      await resumeIfSuspended(context);
 
-    await deps.delay(150);
+      await deps.delay(150);
 
-    return context;
+      status = "unlocked";
+      return context;
+    } catch (error) {
+      status = "failed";
+      throw error;
+    }
   })();
 
   return unlockPromise;
 }
 
+/**
+ * `AudioUnlockGate` discards the unlock outcome (its `finally` proceeds
+ * either way, per the silent-mode-fallback design) — this is the one
+ * place that outcome is still observable, for
+ * `diagnostics/capabilities/audio.ts`'s pre-flight report. Does NOT
+ * un-memoize `unlockAudio` itself: one unlock per session is the correct
+ * production guarantee, and diagnostics reads this status rather than
+ * forcing a second real attempt.
+ */
+export function audioUnlockStatus(): AudioUnlockStatus {
+  return status;
+}
+
 /** Test-only: resets memoization so each test exercises a fresh sequence. */
 export function __resetAudioUnlockForTests(): void {
   unlockPromise = null;
+  status = "not-attempted";
 }

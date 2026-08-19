@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { LearnerEvent } from "@shizi/learner-state";
 import { exportToJsonl } from "@shizi/learner-state";
-import type { ArmAssignment } from "@shizi/adaptivity";
+import type { ArmAssignment, SessionRating } from "@shizi/adaptivity";
 import { openEventStore, type EventStore } from "./db.js";
-import { handleAssignmentsSync, handleEventsSync } from "./handle-sync.js";
+import { handleAssignmentsSync, handleEventsSync, handleRatingsSync } from "./handle-sync.js";
 
 const TOKEN = "test-shared-token";
 
@@ -154,5 +154,77 @@ describe("handleAssignmentsSync (task 9.2)", () => {
       { expectedToken: TOKEN, store },
     );
     expect(result).toMatchObject({ status: 200, body: { inserted: 0, rejected: 1 } });
+  });
+});
+
+describe("handleRatingsSync (task 9.2, adaptivity-instrumentation spec: 'Parent one-tap session rating' — server side)", () => {
+  let dir: string;
+  let store: EventStore;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "shizi-handle-sync-ratings-test-"));
+    store = openEventStore(join(dir, "events.sqlite"));
+  });
+
+  afterEach(() => {
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("rejects without a valid token", () => {
+    const result = handleRatingsSync({ authHeader: null, bodyText: "" }, { expectedToken: TOKEN, store });
+    expect(result.status).toBe(401);
+  });
+
+  it("accepts and inserts a valid rating", () => {
+    const rating: SessionRating = {
+      sessionId: "session-1",
+      rating: "loved",
+      recordedAt: "2026-08-19T09:00:00.000Z",
+    };
+    const body = `${JSON.stringify(rating)}\n`;
+
+    const result = handleRatingsSync(
+      { authHeader: `Bearer ${TOKEN}`, bodyText: body },
+      { expectedToken: TOKEN, store },
+    );
+
+    expect(result).toMatchObject({ status: 200, body: { inserted: 1, duplicates: 0, rejected: 0 } });
+    expect(store.getAllRatings()).toEqual([rating]);
+  });
+
+  it("is idempotent — re-posting the same sessionId counts as a duplicate, not a second insert", () => {
+    const rating: SessionRating = {
+      sessionId: "session-1",
+      rating: "loved",
+      recordedAt: "2026-08-19T09:00:00.000Z",
+    };
+    const body = `${JSON.stringify(rating)}\n`;
+    handleRatingsSync({ authHeader: `Bearer ${TOKEN}`, bodyText: body }, { expectedToken: TOKEN, store });
+
+    const second = handleRatingsSync(
+      { authHeader: `Bearer ${TOKEN}`, bodyText: body },
+      { expectedToken: TOKEN, store },
+    );
+
+    expect(second).toMatchObject({ status: 200, body: { inserted: 0, duplicates: 1 } });
+    expect(store.getAllRatings()).toHaveLength(1);
+  });
+
+  it("rejects a rating value outside the allowed set (defense in depth)", () => {
+    const body = `${JSON.stringify({ sessionId: "session-1", rating: "amazing", recordedAt: "2026-08-19T09:00:00.000Z" })}\n`;
+    const result = handleRatingsSync(
+      { authHeader: `Bearer ${TOKEN}`, bodyText: body },
+      { expectedToken: TOKEN, store },
+    );
+    expect(result).toMatchObject({ status: 200, body: { inserted: 0, rejected: 1 } });
+  });
+
+  it("rejects malformed NDJSON with a 400, not a 500 or a crash", () => {
+    const result = handleRatingsSync(
+      { authHeader: `Bearer ${TOKEN}`, bodyText: "not json at all {{{" },
+      { expectedToken: TOKEN, store },
+    );
+    expect(result.status).toBe(400);
   });
 });

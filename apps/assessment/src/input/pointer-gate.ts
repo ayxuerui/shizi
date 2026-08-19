@@ -26,12 +26,31 @@ export interface PointerGateOptions {
   now?: () => number;
 }
 
+/** One decision/activity record, for `diagnostics/capabilities/pointer.ts`'s
+ * palm-rejection pre-flight check — task 10.0's item (c). The gate's
+ * verdicts alone (`shouldAccept`) can't show "14 palm touches were
+ * rejected during that two-handed run"; a decision stream can. */
+export interface PointerDecisionRecord {
+  at: number;
+  phase: "down" | "up" | "cancel" | "decide";
+  pointerType: string;
+  pointerId: number;
+  accepted?: boolean;
+  penActive: boolean;
+}
+
 export interface PointerGate {
   onPointerDown(event: PointerLikeEvent): void;
   onPointerUp(event: PointerLikeEvent): void;
   onPointerCancel(event: PointerLikeEvent): void;
   /** Whether an event of this pointer type should be accepted right now. */
   shouldAccept(event: PointerLikeEvent): boolean;
+  /** Diagnostics-only observability, not used by the real tap path (see
+   * `use-tap.ts`). Returns an unsubscribe function. A throwing listener
+   * is swallowed — a diagnostics bug must never break the child's ability
+   * to tap, the same reasoning `audio/play.ts`'s `playViaElement` already
+   * applies to its own failure mode. */
+  subscribe(listener: (record: PointerDecisionRecord) => void): () => void;
 }
 
 const DEFAULT_GRACE_MS = 500;
@@ -42,6 +61,7 @@ export function createPointerGate(options: PointerGateOptions = {}): PointerGate
 
   const activePenPointers = new Set<number>();
   let penLastActiveAt: number | null = null;
+  const listeners = new Set<(record: PointerDecisionRecord) => void>();
 
   function isPenActive(): boolean {
     if (activePenPointers.size > 0) return true;
@@ -49,7 +69,17 @@ export function createPointerGate(options: PointerGateOptions = {}): PointerGate
     return now() - penLastActiveAt < graceMs;
   }
 
-  function notePenActivity(event: PointerLikeEvent, active: boolean): void {
+  function emit(record: PointerDecisionRecord): void {
+    for (const listener of listeners) {
+      try {
+        listener(record);
+      } catch {
+        // Swallowed — see PointerGate.subscribe's doc comment.
+      }
+    }
+  }
+
+  function notePenActivity(event: PointerLikeEvent, active: boolean, phase: "down" | "up" | "cancel"): void {
     if (event.pointerType !== "pen") return;
     if (active) {
       activePenPointers.add(event.pointerId);
@@ -57,30 +87,53 @@ export function createPointerGate(options: PointerGateOptions = {}): PointerGate
       activePenPointers.delete(event.pointerId);
     }
     penLastActiveAt = now();
+    emit({ at: now(), phase, pointerType: event.pointerType, pointerId: event.pointerId, penActive: isPenActive() });
   }
 
   return {
     onPointerDown(event) {
-      notePenActivity(event, true);
+      notePenActivity(event, true, "down");
     },
     onPointerUp(event) {
-      notePenActivity(event, false);
+      notePenActivity(event, false, "up");
     },
     onPointerCancel(event) {
-      notePenActivity(event, false);
+      notePenActivity(event, false, "cancel");
     },
     shouldAccept(event) {
       // Never trust e.buttons here (spike-confirmed unreliable on a
       // fresh press) — accept/reject decisions are keyed purely on
       // pointerType and the tracked pen-activity state above.
-      if (event.pointerType === "pen") return true;
-      if (event.pointerType === "touch" && isPenActive()) return false;
-      return true; // mouse, or touch with no pen in play
+      const penActive = isPenActive();
+      const accepted = event.pointerType === "pen" || !(event.pointerType === "touch" && penActive);
+      emit({
+        at: now(),
+        phase: "decide",
+        pointerType: event.pointerType,
+        pointerId: event.pointerId,
+        accepted,
+        penActive,
+      });
+      return accepted; // mouse, or touch with no pen in play, is also accepted
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
     },
   };
 }
 
 /** App-wide singleton for real usage — every TapTarget shares this one
  * instance so pen activity on one button suppresses palm touches on
- * another. Tests should construct their own via `createPointerGate`. */
-export const pointerGate: PointerGate = createPointerGate();
+ * another. Tests should construct their own via `createPointerGate`
+ * EXCEPT `diagnostics/PenPalmProbe.tsx`'s own test, which deliberately
+ * observes this real shared instance — see `__resetPointerGateForTests`
+ * below for clearing state between those tests. */
+export let pointerGate: PointerGate = createPointerGate();
+
+/** Test-only: rebuilds the shared singleton so pen-active state from one
+ * test can't leak into the next (ES module bindings are live, so
+ * existing `import { pointerGate }` call sites see the fresh instance). */
+export function __resetPointerGateForTests(): void {
+  pointerGate = createPointerGate();
+}

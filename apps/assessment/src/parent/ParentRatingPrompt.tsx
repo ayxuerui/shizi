@@ -1,10 +1,9 @@
+import type { Rating } from "@shizi/adaptivity";
 import { TapTarget } from "../components/TapTarget.js";
 import { COPY } from "../copy.js";
-import { recordRating, type Rating } from "./rating.js";
 
 export interface ParentRatingPromptProps {
-  sessionId: string;
-  onRate: () => void;
+  onRate: (rating: Rating) => void;
   onSkip: () => void;
 }
 
@@ -13,11 +12,14 @@ export interface ParentRatingPromptProps {
  * prompt. Skip is always available and this never blocks anything —
  * every assessment event for this bout is already persisted by the time
  * this renders (see `ClosingBeat`'s trigger, off `session-complete`).
+ *
+ * Purely presentational: it reports the chosen `Rating` upward and does
+ * no persistence itself — `session/use-assessment-session.ts`'s `rate()`
+ * owns that, the same seam `onEvent`/`onAssignments` already use.
  */
-export function ParentRatingPrompt({ sessionId, onRate, onSkip }: ParentRatingPromptProps) {
+export function ParentRatingPrompt({ onRate, onSkip }: ParentRatingPromptProps) {
   const rate = (rating: Rating): void => {
-    recordRating({ sessionId, rating, recordedAt: new Date().toISOString() });
-    onRate();
+    onRate(rating);
   };
 
   return (
