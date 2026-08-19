@@ -1,0 +1,32 @@
+{
+  "name": "@shizi/sync-service",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "build": "echo 'no build step — runs via tsx directly, see src/server.ts'",
+    "typecheck": "tsc --noEmit",
+    "pull:events": "tsx scripts/pull-events.ts",
+    "publish:config": "tsx scripts/publish-config.ts"
+  },
+  "dependencies": {
+    "@shizi/adaptivity": "*",
+    "@shizi/assessment-engine": "*",
+    "@shizi/character-data": "*",
+    "@shizi/curriculum": "*",
+    "@shizi/learner-state": "*",
+    "better-sqlite3": "^13.0.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.10.2",
+    "tsx": "^4.23.12",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.7"
+  }
+}

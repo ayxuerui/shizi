@@ -42,7 +42,7 @@ export function AudioUnlockGate({ children }: AudioUnlockGateProps) {
 
   return (
     <div style={{ display: "grid", placeItems: "center", minHeight: "100dvh" }}>
-      <audio ref={audioRef} src="/audio/unlock-tone.wav" preload="auto" />
+      <audio ref={audioRef} src={`${import.meta.env.BASE_URL}audio/unlock-tone.wav`} preload="auto" />
       <TapTarget label={COPY.audioUnlock.tapToStart} onActivate={() => void handleTap()}>
         <span style={{ fontSize: "1.5rem" }}>{COPY.audioUnlock.tapToStart}</span>
       </TapTarget>

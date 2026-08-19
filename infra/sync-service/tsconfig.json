@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false
+  },
+  "include": ["src", "scripts"],
+  "references": [
+    { "path": "../../packages/adaptivity" },
+    { "path": "../../packages/assessment-engine" },
+    { "path": "../../packages/character-data" },
+    { "path": "../../packages/curriculum" },
+    { "path": "../../packages/learner-state" }
+  ]
+}

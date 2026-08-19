@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LearnerEvent } from "@shizi/learner-state";
+import type { ArmAssignment } from "@shizi/adaptivity";
 import { __resetDBForTests } from "./db.js";
-import { enqueueEvent, listPendingEvents } from "./event-queue.js";
+import { enqueueAssignments, enqueueEvent, listPendingAssignments, listPendingEvents } from "./event-queue.js";
 import { flushQueue } from "./sync.js";
 
 function makeEvent(overrides: Partial<LearnerEvent> = {}): LearnerEvent {
@@ -22,6 +23,16 @@ function makeEvent(overrides: Partial<LearnerEvent> = {}): LearnerEvent {
   };
 }
 
+function makeAssignment(overrides: Partial<ArmAssignment> = {}): ArmAssignment {
+  return {
+    character: "山",
+    arm: "hear-tap",
+    pairId: "pair-1",
+    assignedAt: "2026-08-19T09:00:00.000Z",
+    ...overrides,
+  };
+}
+
 async function resetDatabase(): Promise<void> {
   await __resetDBForTests();
   await new Promise<void>((resolve, reject) => {
@@ -32,14 +43,14 @@ async function resetDatabase(): Promise<void> {
   });
 }
 
-describe("flushQueue (task 8.2, assessment spec: 'Full offline operation')", () => {
+describe("flushQueue (task 9.2, assessment spec: 'Full offline operation')", () => {
   beforeEach(resetDatabase);
   afterEach(async () => {
     await resetDatabase();
     vi.unstubAllEnvs();
   });
 
-  it("skips when no sync endpoint is configured — Section 9 doesn't exist yet", async () => {
+  it("skips when no sync endpoint is configured — Section 9 not deployed", async () => {
     vi.stubEnv("VITE_SYNC_ENDPOINT", "");
     const result = await flushQueue();
     expect(result.status).toBe("skipped");
@@ -56,7 +67,7 @@ describe("flushQueue (task 8.2, assessment spec: 'Full offline operation')", () 
     expect(await listPendingEvents()).toEqual([event]);
   });
 
-  it("flushes pending events and marks them synced on a 2xx response", async () => {
+  it("flushes pending events to /events and marks them synced on a 2xx response", async () => {
     vi.stubEnv("VITE_SYNC_ENDPOINT", "https://sync.example.test");
     const event = makeEvent();
     await enqueueEvent(event);
@@ -64,9 +75,34 @@ describe("flushQueue (task 8.2, assessment spec: 'Full offline operation')", () 
 
     const result = await flushQueue({ fetchImpl, isOnline: () => true });
 
-    expect(result).toEqual({ status: "flushed", count: 1 });
-    expect(fetchImpl).toHaveBeenCalledOnce();
+    expect(result).toEqual({ status: "flushed", eventsCount: 1, assignmentsCount: 0 });
+    expect(fetchImpl).toHaveBeenCalledWith("https://sync.example.test/events", expect.anything());
     expect(await listPendingEvents()).toEqual([]);
+  });
+
+  it("flushes pending assignments to /assignments and marks them synced on a 2xx response", async () => {
+    vi.stubEnv("VITE_SYNC_ENDPOINT", "https://sync.example.test");
+    const assignment = makeAssignment();
+    await enqueueAssignments([assignment]);
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 200 }));
+
+    const result = await flushQueue({ fetchImpl, isOnline: () => true });
+
+    expect(result).toEqual({ status: "flushed", eventsCount: 0, assignmentsCount: 1 });
+    expect(fetchImpl).toHaveBeenCalledWith("https://sync.example.test/assignments", expect.anything());
+    expect(await listPendingAssignments()).toEqual([]);
+  });
+
+  it("flushes both events and assignments together in one call", async () => {
+    vi.stubEnv("VITE_SYNC_ENDPOINT", "https://sync.example.test");
+    await enqueueEvent(makeEvent());
+    await enqueueAssignments([makeAssignment()]);
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 200 }));
+
+    const result = await flushQueue({ fetchImpl, isOnline: () => true });
+
+    expect(result).toEqual({ status: "flushed", eventsCount: 1, assignmentsCount: 1 });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
   it("leaves events pending and reports failure on a non-2xx response — never throws", async () => {
@@ -81,6 +117,19 @@ describe("flushQueue (task 8.2, assessment spec: 'Full offline operation')", () 
     expect(await listPendingEvents()).toEqual([event]);
   });
 
+  it("a failed events flush does not attempt the assignments flush in the same call", async () => {
+    vi.stubEnv("VITE_SYNC_ENDPOINT", "https://sync.example.test");
+    await enqueueEvent(makeEvent());
+    await enqueueAssignments([makeAssignment()]);
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 500 }));
+
+    const result = await flushQueue({ fetchImpl, isOnline: () => true });
+
+    expect(result.status).toBe("failed");
+    expect(fetchImpl).toHaveBeenCalledTimes(1); // stopped after /events failed
+    expect(await listPendingAssignments()).toHaveLength(1); // untouched, retried next time
+  });
+
   it("leaves events pending and reports failure when fetch itself throws — never throws", async () => {
     vi.stubEnv("VITE_SYNC_ENDPOINT", "https://sync.example.test");
     const event = makeEvent();
@@ -89,10 +138,9 @@ describe("flushQueue (task 8.2, assessment spec: 'Full offline operation')", () 
       throw new Error("network down");
     });
 
-    const result = await expect(flushQueue({ fetchImpl, isOnline: () => true })).resolves.toMatchObject({
+    await expect(flushQueue({ fetchImpl, isOnline: () => true })).resolves.toMatchObject({
       status: "failed",
     });
-    void result;
     expect(await listPendingEvents()).toEqual([event]);
   });
 

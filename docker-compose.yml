@@ -1,9 +1,11 @@
 services:
-  # Serves spikes/ over the local network (port 8080) and, via the shared
-  # cloudflared tunnel, over the public hostname configured for it in the
-  # Cloudflare Zero Trust dashboard. Throwaway dev tooling for the P0 spikes
-  # in tasks.md Section 2 — not part of the production Cloudflare Pages/
-  # Worker deploy (see infra/).
+  # Serves spikes/ over the local network (port 8080). Throwaway dev
+  # tooling for the P0 spikes in tasks.md Section 2 — no longer the
+  # target of the shizi.realxco.com public hostname: that's been
+  # repointed to `gateway` below, reusing the same domain rather than
+  # provisioning a second one (design.md's self-hosted decision entry).
+  # This service still runs for local spike access; it's just not
+  # tunneled to that hostname anymore.
   spikes:
     image: nginx:1.27-alpine
     container_name: shizi-spikes
@@ -15,6 +17,71 @@ services:
     restart: unless-stopped
     networks:
       - cloudflared-net
+
+  # Task 9.1: static PWA hosting, and the single "holding service" /
+  # gateway container — the ONE thing the Cloudflare Tunnel needs to
+  # point at, named `shizi` (not `shizi-assessment`) so managing it stays
+  # a one-time dashboard action regardless of how many apps end up served
+  # from it. Per design.md's self-hosted decision (Cloudflare
+  # Pages/Worker/D1 → self-hosted, no Cloudflare account needed) — same
+  # pattern as `spikes` above, just serving a real build instead of raw
+  # spike HTML. Build on the host first:
+  #   npm run build --workspace=apps/assessment
+  # then `docker compose up gateway`. Reuses shizi.realxco.com (already
+  # tunneled, previously pointed at `spikes`) rather than a second
+  # hostname — the app is served under /assessment/ (matching
+  # vite.config.ts's `base`), and nginx also reverse-proxies
+  # /assessment/sync/* to the `sync` service below (see
+  # infra/nginx-assessment.conf), so the app and its sync endpoint are
+  # same-origin. A future second app would get its own path prefix on this
+  # same container rather than a second tunnel target. The ONE dashboard
+  # action needed: repoint that hostname's target service from `spikes` to
+  # `shizi-gateway` in the Cloudflare Zero Trust dashboard — see
+  # infra/README.md.
+  gateway:
+    image: nginx:1.27-alpine
+    container_name: shizi-gateway
+    ports:
+      - "8081:80"
+    volumes:
+      - ./apps/assessment/dist:/usr/share/nginx/html:ro
+      - ./infra/nginx-assessment.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
+    networks:
+      - cloudflared-net
+
+  # Tasks 9.2/9.3: the sync endpoint + event store (self-hosted SQLite,
+  # not Cloudflare D1 — see design.md). Requires a .env file (see
+  # infra/sync-service/.env.example) with SYNC_SHARED_TOKEN set; the
+  # service refuses to start without it. `events-data` persists the live
+  # SQLite file + backup snapshots across container restarts — the
+  # ACTUAL durable backup is data/events/events.jsonl (see
+  # infra/sync-service/scripts/pull-events.ts), committed to git, not
+  # this volume. No host port published: reached only via `gateway`'s
+  # nginx reverse-proxy (/assessment/sync/*) over this shared docker
+  # network, not directly from outside it — nothing else needs to reach
+  # it. Use
+  # `docker compose exec sync curl localhost:8787/health` for direct
+  # local debugging if needed.
+  sync:
+    build:
+      context: .
+      dockerfile: infra/sync-service/Dockerfile
+    container_name: shizi-sync
+    env_file:
+      - ./infra/sync-service/.env
+    environment:
+      PORT: 8787
+      EVENTS_DB_PATH: /repo/infra/sync-service/data/events.sqlite
+      BACKUP_DIR: /repo/infra/sync-service/data/backups
+    volumes:
+      - events-data:/repo/infra/sync-service/data
+    restart: unless-stopped
+    networks:
+      - cloudflared-net
+
+volumes:
+  events-data:
 
 networks:
   cloudflared-net:
