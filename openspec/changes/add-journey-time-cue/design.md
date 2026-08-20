@@ -36,22 +36,27 @@ today, not just conventions:
 
 ## Decisions
 
-**One combined trail, not two separate meters, and not folding time into the stones themselves.**
-Overloading the stones so they also advance with time would mean a stone can light up while the child does
-nothing — worse than a countdown, since it reads as "you lost a stone's worth of time," and it would
+**Two independent trails, not one `max()`-blended bar — and not folding time into the stones
+themselves.** An earlier version of this design blended both channels into one number specifically to
+avoid two indicators "visibly disagreeing." Revisited, at the user's direction: disagreement isn't
+actually dishonest here — it's information. This whole cue exists for the *parent's* benefit (per
+proposal.md's "Why"), not the child's; nothing about it is numeric, and a parent noticing "the time
+trail is further along than the item trail" is not the same thing as the child seeing a score. Hiding
+that behind a single blended figure traded real information for a false sense of tidiness. Overloading
+the STONES themselves to also move with time is still rejected, for the original reason: a stone
+lighting up while the child does nothing would read as "you lost a stone's worth of time," and would
 contradict `NarrativeStage.tsx`'s existing, reviewed doc comment that stones encode "beats elapsed, never
-correctness." Two fully separate indicators (stones plus an independent bar) can visibly disagree — e.g.
-stones full at 6/6 while a time-based bar sits at 20% — which is exactly the kind of dishonesty already
-latent in today's saturating stones. Instead: the stones stay exactly as-is, and a new thin trail renders
-behind/under them, filling continuously. One object, so there's no "which one is real" ambiguity, and the
-stones (solid `--color-accent`) stay visually dominant over the trail (`--color-accent` at ~0.3 opacity).
+correctness." So: stones stay exactly as they are (discrete, per-answer, unchanged meaning), and TWO
+separate, continuous trails render behind them — one time-driven, one item-driven — each independently
+honest about its own bound, both using the same low-opacity `--color-accent` tint so the stones
+(solid, on top) stay visually dominant over either.
 
-**The trail's fraction is `max(elapsed ÷ maxDurationMs, beatIndex ÷ maxItems)`, not elapsed time alone.**
-The bout ends on whichever bound fires first, so "how close to ending" is genuinely the larger of the two
-channels. This is also the direct fix for the stone-saturation gap: a duration-bounded bout is
-clock-driven, an item-bounded bout is answer-driven, and the trail stays monotone and never stalls in
-either case. A side effect worth naming: answering sometimes visibly nudges the trail forward, which reads
-as agency rather than passive countdown pressure — considered a benefit, not a workaround.
+**Each channel is computed and rendered independently; there is no more single blended fraction.**
+`journeyChannels()` (renamed from the earlier `journeyFraction()`) returns
+`{ timeFraction, itemFraction }` rather than one `max()`-derived number. Each is clamped to
+`[0, PRE_CLOSING_CAP]` independently while the bout is running, and both snap to exactly `1` together
+when `complete` — preserving "the child never sees which bound fired" for both channels at once, the
+same guarantee the single-trail version had, just applied twice instead of collapsed into one.
 
 **The computation lives outside `BoutState`, in a new `session/session-clock.ts` factory, not a new
 reducer field.** `createSessionClock()` provides an `elapedMs` function that gets passed into the engine's
@@ -66,20 +71,24 @@ behavior change: `Date.now()` is not monotonic (an NTP/wall-clock step could mov
 now visibly yank the trail). Since the app has never injected this dependency before, doing so now is a
 one-line, deliberate improvement — called out here explicitly rather than sliding in unmentioned.
 
-**Rendering writes directly to a ref's `style.width` on a 1Hz interval, not `useState`.** A per-second
-`setState` anywhere in the `BoutScreen` subtree would re-render `ProbePanel` every second during probing
-and would produce `act()` warning noise in `BoutScreen.test.tsx`/`App.test.tsx`, which already run real
-timers for several seconds per test. A width is animation output, not state anything else derives from —
-writing it to the DOM node directly is both cheaper and quieter. The interval clears on unmount and once
-the bout completes, matching the existing timer-cleanup discipline in `use-assessment-session.ts`.
+**Rendering writes directly to two refs' `style.width`, one per channel, on a shared 1Hz interval, not
+`useState`.** A per-second `setState` anywhere in the `BoutScreen` subtree would re-render `ProbePanel`
+every second during probing and would produce `act()` warning noise in `BoutScreen.test.tsx`/
+`App.test.tsx`, which already run real timers for several seconds per test. A width is animation output,
+not state anything else derives from — writing it to each DOM node directly is both cheaper and quieter.
+One interval drives both fills (no reason to run two independent timers for the same tick), and it
+clears on unmount and once the bout completes, matching the existing timer-cleanup discipline in
+`use-assessment-session.ts`.
 
-**Capped at 97% (`PRE_CLOSING_CAP`) while the bout is still running; exactly 100% only when `complete`.**
-Without a cap, a child who wanders off mid-probe (leaving the bout stuck in `probing`, since the duration
-bound is only checked inside `nextProbe()`, which only runs after a response) would come back to a
-completely full trail on a bout that still hasn't ended — a visible broken promise. `complete` is derived
-from `phase === "closing" | "done"`, not from `completionReason` — `completionReason` is deliberately never
-an input to the fraction calculation, which is what makes "the child never sees which bound fired"
-structurally true here too, matching `ClosingBeat.tsx`'s existing principle, rather than merely convention.
+**Capped at 97% (`PRE_CLOSING_CAP`) per channel while the bout is still running; both snap to exactly
+100% only when `complete`.** Without a cap, a child who wanders off mid-probe (leaving the bout stuck in
+`probing`, since the duration bound is only checked inside `nextProbe()`, which only runs after a
+response) would come back to a completely full trail on a bout that still hasn't ended — a visible
+broken promise, now for either channel independently. `complete` is derived from
+`phase === "closing" | "done"`, not from `completionReason` — `completionReason` is deliberately never an
+input to either channel's calculation, which is what makes "the child never sees which bound fired"
+structurally true here too, matching `ClosingBeat.tsx`'s existing principle, rather than merely
+convention.
 
 **Reduced motion:** this app has no CSS classes (100% inline styles) and no way to express a media query
 inline, so the component reads `window.matchMedia?.("(prefers-reduced-motion: reduce)").matches` once and
@@ -88,18 +97,27 @@ un-transitioned version simply steps imperceptibly — nothing is lost.
 
 ## Risks / Trade-offs
 
-- **[Risk]** A filling bar is still visible motion. Fills-never-drains, no color shift, low opacity, and a
-  4px height all lower the temperature, but a child who notices it moving while hesitating could still
-  learn "the picture moves when I'm slow." No amount of styling proves that away — only observing a real
-  session (task 10.2 in `bootstrap-shizi-assessment`) settles it. → **Mitigation:** the trail is a single
-  optional prop on `NarrativeStage`; removing it after a real session is a two-line revert, not a project.
+- **[Risk]** Two filling bars is still visible motion, now doubled. Fills-never-drains, no color shift,
+  low opacity, and a 4px height all lower the temperature, but a child who notices either one moving
+  while hesitating could still learn "the picture moves when I'm slow." No amount of styling proves that
+  away — only observing a real session (task 10.2 in `bootstrap-shizi-assessment`) settles it. →
+  **Mitigation:** both trails are gated behind the single optional `timing` prop on `NarrativeStage`;
+  removing them after a real session is a two-line revert, not a project.
 - **[Risk]** Pressure can arrive through the adult, not the pixels — a parent narrating "hurry, we're
-  almost done" while watching the bar reintroduces exactly the pressure the design removes from the
+  almost done" while watching either bar reintroduces exactly the pressure the design removes from the
   screen. → **Mitigation:** none in code; named here so it's a known, not a silently-missed, risk.
 - **[Risk]** The pre-existing engine gap (an abandoned bout can run past `maxDurationMs` without closing,
   since the bound is only checked inside `nextProbe()`) becomes newly *visible* once there's a progress
-  indicator to notice being "stuck." → **Mitigation:** the 97% cap hides the visible symptom; it does not
-  fix the underlying engine behavior, which is out of scope for this change (see Non-Goals).
-- **[Trade-off]** `max()` of two channels means the trail can jump forward on a single answer, at the same
-  moment a stone lights and the "advance" cue plays. Read as a feature (agency) rather than a bug here, but
-  worth watching in a real session for feeling "loud" layered with the existing audio cue.
+  indicator to notice being "stuck." → **Mitigation:** the 97% cap hides the visible symptom on both
+  channels; it does not fix the underlying engine behavior, which is out of scope for this change (see
+  Non-Goals).
+- **[Trade-off]** The item-fraction trail and the existing stone path both derive from the same
+  `beatIndex` — they represent closely related information at different granularities (0-6 discrete vs.
+  0-`maxItems` continuous), which could read as redundant. Kept anyway: the continuous item trail is
+  specifically what fixes the stones' saturation-at-6 problem, and the stones are deliberately left alone
+  so their existing "beats elapsed" meaning doesn't change. Worth naming rather than glossing over.
+- **[Trade-off]** Each channel still advances in a discrete jump on every answer (since `beatIndex` only
+  changes on `RESPONDED`, not continuously) — removing the `max()` blend doesn't eliminate that, it just
+  makes it more legible: the item trail's jump is now attributable to a clear, single cause (an answer
+  was recorded) rather than to a `max()` crossover between two channels that could look like it came from
+  nowhere.

@@ -12,35 +12,49 @@ function fakeTiming(overrides: Partial<{ elapsedMs: number | null; maxDurationMs
   };
 }
 
-function fillWidthPercent(container: HTMLElement): number {
-  const fill = container.querySelector('[data-testid="journey-trail"] > div') as HTMLDivElement;
+function fillWidthPercent(container: HTMLElement, testId: string): number {
+  const fill = container.querySelector(`[data-testid="${testId}"] > div`) as HTMLDivElement;
   return Number.parseFloat(fill.style.width);
 }
 
-describe("JourneyTrail (assessment spec: 'Narrative framing' — elapsed-bout progress cue is non-numeric)", () => {
+describe("JourneyTrail (assessment spec: 'Narrative framing' — elapsed-bout progress cue is non-numeric, two independent channels)", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
-  it("starts at 0% width", () => {
+  it("both fills start at 0% width", () => {
     const { container } = render(<JourneyTrail timing={fakeTiming({ elapsedMs: 0 })} beatIndex={0} complete={false} />);
-    expect(fillWidthPercent(container)).toBe(0);
+    expect(fillWidthPercent(container, "journey-trail-time")).toBe(0);
+    expect(fillWidthPercent(container, "journey-trail-item")).toBe(0);
   });
 
-  it("advances the fill width as elapsed time increases, on each 1Hz tick", () => {
+  it("the time fill advances as elapsed time increases, independent of item progress", () => {
     let elapsed = 0;
     const timing: SessionTiming = { elapsedSinceStartMs: () => elapsed, maxDurationMs: 90_000, maxItems: 30 };
-    const { container } = render(<JourneyTrail timing={timing} beatIndex={0} complete={false} />);
-    const before = fillWidthPercent(container);
+    const { container, rerender } = render(<JourneyTrail timing={timing} beatIndex={0} complete={false} />);
+    const itemBefore = fillWidthPercent(container, "journey-trail-item");
 
     elapsed = 45_000;
     vi.advanceTimersByTime(1000);
+    rerender(<JourneyTrail timing={timing} beatIndex={0} complete={false} />);
 
-    expect(fillWidthPercent(container)).toBeGreaterThan(before);
+    expect(fillWidthPercent(container, "journey-trail-time")).toBeGreaterThan(0);
+    expect(fillWidthPercent(container, "journey-trail-item")).toBe(itemBefore); // unchanged: beatIndex didn't move
   });
 
-  it("shows 100% width when complete", () => {
+  it("the item fill advances as beatIndex increases, independent of elapsed time (proves there's no hidden blending)", () => {
+    const timing: SessionTiming = { elapsedSinceStartMs: () => 0, maxDurationMs: 90_000, maxItems: 30 };
+    const { container, rerender } = render(<JourneyTrail timing={timing} beatIndex={0} complete={false} />);
+
+    rerender(<JourneyTrail timing={timing} beatIndex={15} complete={false} />);
+
+    expect(fillWidthPercent(container, "journey-trail-item")).toBeCloseTo(50);
+    expect(fillWidthPercent(container, "journey-trail-time")).toBe(0); // unchanged: elapsed time didn't move
+  });
+
+  it("both fills show 100% width when complete", () => {
     const { container } = render(<JourneyTrail timing={fakeTiming({ elapsedMs: 1000 })} beatIndex={2} complete={true} />);
-    expect(fillWidthPercent(container)).toBe(100);
+    expect(fillWidthPercent(container, "journey-trail-time")).toBe(100);
+    expect(fillWidthPercent(container, "journey-trail-item")).toBe(100);
   });
 
   it("renders no text content at all — the no-digits guarantee asserted at this component's own level", () => {
@@ -49,19 +63,21 @@ describe("JourneyTrail (assessment spec: 'Narrative framing' — elapsed-bout pr
     expect(container.textContent).not.toMatch(/\d/);
   });
 
-  it("the fill uses only the existing --color-accent token, never a new urgency color", () => {
+  it("both fills use only the existing --color-accent token, never a new urgency color", () => {
     const { container } = render(<JourneyTrail timing={fakeTiming()} beatIndex={0} complete={false} />);
-    const fill = container.querySelector('[data-testid="journey-trail"] > div') as HTMLDivElement;
-    expect(fill.style.background).toContain("var(--color-accent)");
+    const timeFill = container.querySelector('[data-testid="journey-trail-time"] > div') as HTMLDivElement;
+    const itemFill = container.querySelector('[data-testid="journey-trail-item"] > div') as HTMLDivElement;
+    expect(timeFill.style.background).toContain("var(--color-accent)");
+    expect(itemFill.style.background).toContain("var(--color-accent)");
   });
 
-  it("the track is aria-hidden (decorative)", () => {
+  it("the outer trail container is aria-hidden (decorative)", () => {
     const { container } = render(<JourneyTrail timing={fakeTiming()} beatIndex={0} complete={false} />);
-    const track = container.querySelector('[data-testid="journey-trail"]') as HTMLDivElement;
-    expect(track.getAttribute("aria-hidden")).toBe("true");
+    const trail = container.querySelector('[data-testid="journey-trail"]') as HTMLDivElement;
+    expect(trail.getAttribute("aria-hidden")).toBe("true");
   });
 
-  it("clears the interval on unmount", () => {
+  it("clears the shared interval on unmount", () => {
     const { unmount } = render(<JourneyTrail timing={fakeTiming()} beatIndex={0} complete={false} />);
     expect(vi.getTimerCount()).toBeGreaterThan(0);
     unmount();

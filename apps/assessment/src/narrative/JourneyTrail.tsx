@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, type RefObject } from "react";
 import type { SessionTiming } from "../session/use-assessment-session.js";
-import { journeyFraction } from "./journey-progress.js";
+import { journeyChannels } from "./journey-progress.js";
 
 export interface JourneyTrailProps {
   timing: SessionTiming;
@@ -9,25 +9,60 @@ export interface JourneyTrailProps {
 }
 
 const TICK_MS = 1000;
-const TRAIL_HEIGHT_PX = 4;
+const TRACK_HEIGHT_PX = 3;
+const TRACK_GAP_PX = 3;
+
+interface TrackProps {
+  testId: string;
+  fillRef: RefObject<HTMLDivElement>;
+  transition: string;
+}
+
+function Track({ testId, fillRef, transition }: TrackProps) {
+  return (
+    <div
+      data-testid={testId}
+      style={{
+        height: `${TRACK_HEIGHT_PX}px`,
+        borderRadius: `${TRACK_HEIGHT_PX / 2}px`,
+        background: "var(--color-surface)",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        ref={fillRef}
+        style={{
+          height: "100%",
+          width: "0%",
+          background: "var(--color-accent)",
+          opacity: 0.3,
+          transition,
+        }}
+      />
+    </div>
+  );
+}
 
 /**
- * The continuously-filling trail behind `NarrativeStage`'s stone path —
- * see `journey-progress.ts` for what the fraction means and why. Fills,
- * never drains; `--color-accent` only, at low opacity, so the stones
- * (rendered above this, solid) stay visually dominant. `aria-hidden`:
- * decorative, and announcing a fraction to a screen reader would be
- * exactly the numeric statement this cue is designed to avoid.
+ * TWO independently-honest trails behind `NarrativeStage`'s stone path —
+ * one for elapsed time, one for items answered — see `journey-progress.ts`
+ * for why these are shown separately rather than blended into one number.
+ * Both fill, never drain; `--color-accent` only, at low opacity, so the
+ * stones (rendered above this, solid) stay visually dominant.
+ * `aria-hidden`: decorative, and announcing a fraction to a screen reader
+ * would be exactly the numeric statement this cue is designed to avoid.
  *
- * Writes `style.width` directly to a ref on a 1Hz interval rather than
- * `useState`, deliberately: a per-second `setState` anywhere in the
- * `BoutScreen` subtree would re-render `ProbePanel` every second during
- * probing and produce `act()` warning noise in tests that already run
- * real timers for several seconds. A width is animation output, not
- * state anything else derives from.
+ * Writes both fills' `style.width` directly to refs on a SHARED 1Hz
+ * interval rather than `useState`, deliberately: a per-second `setState`
+ * anywhere in the `BoutScreen` subtree would re-render `ProbePanel` every
+ * second during probing and produce `act()` warning noise in tests that
+ * already run real timers for several seconds. A width is animation
+ * output, not state anything else derives from. One interval drives both
+ * fills — no reason to run two independent timers for the same tick.
  */
 export function JourneyTrail({ timing, beatIndex, complete }: JourneyTrailProps) {
-  const fillRef = useRef<HTMLDivElement>(null);
+  const timeFillRef = useRef<HTMLDivElement>(null);
+  const itemFillRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useMemo(
     () =>
       typeof window !== "undefined" &&
@@ -35,17 +70,19 @@ export function JourneyTrail({ timing, beatIndex, complete }: JourneyTrailProps)
       window.matchMedia("(prefers-reduced-motion: reduce)").matches,
     [],
   );
+  const transition = prefersReducedMotion ? "none" : "width 1000ms linear";
 
   useEffect(() => {
     function tick(): void {
-      const fraction = journeyFraction({
+      const { timeFraction, itemFraction } = journeyChannels({
         elapsedSinceStartMs: timing.elapsedSinceStartMs(),
         maxDurationMs: timing.maxDurationMs,
         beatIndex,
         maxItems: timing.maxItems,
         complete,
       });
-      if (fillRef.current) fillRef.current.style.width = `${fraction * 100}%`;
+      if (timeFillRef.current) timeFillRef.current.style.width = `${timeFraction * 100}%`;
+      if (itemFillRef.current) itemFillRef.current.style.width = `${itemFraction * 100}%`;
     }
 
     tick(); // compute immediately on mount and on every prop change, not just on the next tick
@@ -66,22 +103,13 @@ export function JourneyTrail({ timing, beatIndex, complete }: JourneyTrailProps)
         right: 0,
         top: "50%",
         transform: "translateY(-50%)",
-        height: `${TRAIL_HEIGHT_PX}px`,
-        borderRadius: `${TRAIL_HEIGHT_PX / 2}px`,
-        background: "var(--color-surface)",
-        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+        gap: `${TRACK_GAP_PX}px`,
       }}
     >
-      <div
-        ref={fillRef}
-        style={{
-          height: "100%",
-          width: "0%",
-          background: "var(--color-accent)",
-          opacity: 0.3,
-          transition: prefersReducedMotion ? "none" : "width 1000ms linear",
-        }}
-      />
+      <Track testId="journey-trail-time" fillRef={timeFillRef} transition={transition} />
+      <Track testId="journey-trail-item" fillRef={itemFillRef} transition={transition} />
     </div>
   );
 }

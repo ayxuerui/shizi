@@ -141,9 +141,11 @@ describe("BoutScreen (assessment spec: 'No visible scoring or failure state', 'N
     tap(options[0]!);
 
     await screen.findByText(/悟空到家了/, {}, { timeout: 3000 });
-    const fill = screen.getByTestId("journey-trail").querySelector("div") as HTMLDivElement;
+    const timeFill = screen.getByTestId("journey-trail-time").querySelector("div") as HTMLDivElement;
+    const itemFill = screen.getByTestId("journey-trail-item").querySelector("div") as HTMLDivElement;
     await waitFor(() => {
-      expect(fill.style.width).toBe("100%");
+      expect(timeFill.style.width).toBe("100%");
+      expect(itemFill.style.width).toBe("100%");
     });
     assertNoScoreLikeText();
   });

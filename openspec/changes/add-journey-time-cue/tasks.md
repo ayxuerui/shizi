@@ -11,40 +11,42 @@
       a scripted clock producing an `elapsedMs()`/`elapsedSinceStartMs()` pair that agree exactly; clamped to
       ≥ 0 if the injected clock ever reports a backwards value.
 
-## 2. Pure fraction logic
+## 2. Pure channel logic
 
-- [x] 2.1 Create `apps/assessment/src/narrative/journey-progress.ts`: exports `PRE_CLOSING_CAP = 0.97` and
-      `journeyFraction({ elapsedSinceStartMs, maxDurationMs, beatIndex, maxItems, complete })`. Rules:
-      `complete` → exactly `1`. Otherwise `max(timeChannel, itemChannel)` clamped to `[0, PRE_CLOSING_CAP]`,
-      where `timeChannel = maxDurationMs > 0 && elapsedSinceStartMs !== null ? elapsedSinceStartMs / maxDurationMs : 0`
-      and `itemChannel = maxItems > 0 ? beatIndex / maxItems : 0`. `completionReason` is deliberately NOT an
-      input — see design.md's "child never sees which bound fired" decision.
-- [x] 2.2 `journey-progress.test.ts`: each channel alone; `max()` picking the larger channel in both
-      directions (including the anti-saturation case: low `beatIndex` but high elapsed time, and vice
-      versa); `elapsedSinceStartMs: null` → contributes 0, not `NaN`; `maxDurationMs: 0` / `maxItems: 0` →
-      that channel contributes 0, never `Infinity`; capped at `PRE_CLOSING_CAP` even when elapsed time is
-      many multiples of `maxDurationMs`, while `complete: false`; exactly `1` when `complete`, identical
-      whether the scenario represents a duration-bound or an item-bound close (the structural guard for
-      "child never sees which bound fired").
+- [x] 2.1 Rework `apps/assessment/src/narrative/journey-progress.ts`: exports `PRE_CLOSING_CAP = 0.97` and
+      `journeyChannels({ elapsedSinceStartMs, maxDurationMs, beatIndex, maxItems, complete })` (renamed
+      from `journeyFraction`, and no longer returns a single blended number — see design.md's "Two
+      independent trails" decision, revised from the original single-`max()`-trail design). Returns
+      `{ timeFraction, itemFraction }`. Rules per channel: `complete` → exactly `1` for both. Otherwise
+      each is clamped to `[0, PRE_CLOSING_CAP]` independently:
+      `timeFraction = maxDurationMs > 0 && elapsedSinceStartMs !== null ? elapsedSinceStartMs / maxDurationMs : 0`,
+      `itemFraction = maxItems > 0 ? beatIndex / maxItems : 0`. No blending between the two.
+      `completionReason` is deliberately NOT an input to either — see design.md's "child never sees which
+      bound fired" decision (now applied per channel).
+- [x] 2.2 `journey-progress.test.ts`: each channel computed independently and correctly (no more `max()`
+      cross-channel test — there's no blending to test); `elapsedSinceStartMs: null` → `timeFraction` is 0,
+      not `NaN`; `maxDurationMs: 0` / `maxItems: 0` → that channel is 0, never `Infinity`; each channel
+      capped at `PRE_CLOSING_CAP` independently even when its own input is many multiples past its bound,
+      while `complete: false`; both channels exactly `1` when `complete`, identical whether the scenario
+      represents a duration-bound or an item-bound close (the structural guard for "child never sees which
+      bound fired," now asserted for both channels).
 
 ## 3. Visual component
 
-- [x] 3.1 Create `apps/assessment/src/narrative/JourneyTrail.tsx`: renders a track (`height: 4px`,
-      `borderRadius`, `background: var(--color-surface)`) and a fill (`background: var(--color-accent)`,
-      `opacity: 0.3`) whose `style.width` is written directly via a ref inside a 1Hz interval effect — not
-      `useState` (see design.md's rationale: avoids re-rendering `ProbePanel` every second and `act()`
-      warning noise in existing timer-using tests). Reads
+- [x] 3.1 Rework `apps/assessment/src/narrative/JourneyTrail.tsx`: renders TWO tracks (`height: 3px`,
+      `borderRadius`, `background: var(--color-surface)`), stacked without overlapping, each with its own
+      fill (`background: var(--color-accent)`, `opacity: 0.3`) — one bound to `timeFraction`
+      (`journey-trail-time`), one to `itemFraction` (`journey-trail-item`). Both fills' `style.width` are
+      written directly via refs inside a SHARED 1Hz interval effect (one timer drives both, not two) — not
+      `useState` (see design.md's rationale). Reads
       `window.matchMedia?.("(prefers-reduced-motion: reduce)").matches` once and disables the CSS
-      transition when true. `aria-hidden="true"` on the track (decorative; announcing a fraction to a
-      screen reader would be exactly the numeric statement being avoided). Interval clears on unmount and
-      once `complete` is true.
-- [x] 3.2 `JourneyTrail.test.tsx` (fake timers, injected clock — no real waiting): fill starts at `0%`;
-      advancing the injected clock + `vi.advanceTimersByTime(1000)` increases the fill width monotonically;
-      `complete` → `100%`; `expect(container.textContent).toBe("")` and does not match `/\d/` — the
-      no-digits guarantee asserted at THIS component's own level, not only trusted from `BoutScreen`'s
-      existing assertion; fill's `background` contains `var(--color-accent)` only (structural guard against
-      a future urgency color); unmount clears the interval (`vi.getTimerCount()` → 0); no interval remains
-      once `complete`.
+      transition on both when true. `aria-hidden="true"` on the outer container (decorative). The shared
+      interval clears on unmount and once `complete` is true.
+- [x] 3.2 `JourneyTrail.test.tsx` (fake timers, injected clock — no real waiting): BOTH fills start at
+      `0%`; the time fill advances independent of item progress and vice versa (proving there's no hidden
+      blending); `complete` → both `100%`; `expect(container.textContent).toBe("")` and does not match
+      `/\d/`; both fills' `background` contain `var(--color-accent)` only; unmount clears the shared
+      interval (`vi.getTimerCount()` → 0); no interval remains once `complete`.
 
 ## 4. Wiring
 
@@ -68,15 +70,17 @@
 
 - [x] 5.1 Run the full existing `BoutScreen.test.tsx` suite unmodified — all five `assertNoScoreLikeText()`
       call sites must keep passing exactly as before. This is the change's primary regression signal.
-- [x] 5.2 Add one new `BoutScreen.test.tsx` case: during a `maxItems: 2` (or similar short) bout, a
-      `journey-trail` testid exists mid-bout; once the closing beat is reached (`悟空到家了`), the trail's
-      fill reads `100%`; finish with a final `assertNoScoreLikeText()` call.
+- [x] 5.2 Update the existing `BoutScreen.test.tsx` case (added for the single-trail version): during a
+      `maxItems: 2` (or similar short) bout, a `journey-trail` testid exists mid-bout; once the closing
+      beat is reached (`悟空到家了`), BOTH trails' fills read `100%` (was: the single fill); finish with a
+      final `assertNoScoreLikeText()` call.
 - [x] 5.3 Confirm `session/bout-machine.ts` and `bout-machine.test.ts` are untouched — no new `BoutState`
       field, no edit to the exhaustive key-set assertion. Confirm `feedback/cues.ts`, `styles/tokens.css`,
       `copy.ts`, and `closing/ClosingBeat.tsx` are untouched.
 - [x] 5.4 Run `npm run lint && npm run typecheck && npm test && npm run build` from the repo root (whole
       workspace, matching every prior change in this project) and `openspec validate add-journey-time-cue --strict`.
-      Verified: 364 tests pass workspace-wide (up from 339), lint/typecheck/build all clean.
+      Verified for the two-trail rework: 366 tests pass workspace-wide, lint/typecheck/build all clean,
+      validate passes.
 
 ## 6. On-device follow-up (not part of this change's automated verification)
 

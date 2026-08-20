@@ -14,13 +14,15 @@ actually close to ending.
 
 ## What Changes
 
-- `NarrativeStage` gains a thin, continuously-filling trail behind its existing 6-stone path, reflecting
-  how close the current bout is to ending — computed as the larger of (elapsed-time ÷ max duration) and
-  (items answered ÷ max items), since the bout ends on whichever bound fires first.
-- The trail fills, never drains; uses no new color (only the existing `--color-accent` tint, at low
-  opacity); shows no digits, no percentage, no clock text anywhere.
-- It always reaches exactly full at the closing beat, regardless of which bound actually fired —
-  preserving the existing "the child never sees which bound fired" property.
+- `NarrativeStage` gains TWO thin, continuously-filling trails behind its existing 6-stone path — one
+  reflecting elapsed time ÷ max duration, one reflecting items answered ÷ max items — shown
+  independently rather than blended into a single number via `max()`. Each is an honest read of its own
+  bound; neither is hidden behind the other. (Revised from the original single-blended-trail design —
+  see design.md's "Two independent trails" decision for why.)
+- Both trails fill, never drain; use no new color (only the existing `--color-accent` tint, at low
+  opacity); show no digits, no percentage, no clock text anywhere.
+- Each trail always reaches exactly full at the closing beat, regardless of which bound actually fired —
+  preserving the existing "the child never sees which bound fired" property for both channels.
 - A new session-side clock wrapper (`session/session-clock.ts`) is introduced so the elapsed-time
   computation lives entirely outside `BoutState`/the reducer, which stays untouched. As a side effect,
   this fixes a latent, minor bug: the app today never injects the engine's `elapsedMs` dependency at all,
@@ -49,8 +51,9 @@ actually close to ending.
 - `apps/assessment/src/session/use-assessment-session.ts` — builds and injects the new session clock;
   returns a new `timing` value alongside its existing return values.
 - `apps/assessment/src/bout/BoutScreen.tsx` — passes the two new props through.
-- New files: `apps/assessment/src/session/session-clock.ts`, `apps/assessment/src/narrative/journey-progress.ts`,
-  `apps/assessment/src/narrative/JourneyTrail.tsx` (each with a test file).
+- New files: `apps/assessment/src/session/session-clock.ts`, `apps/assessment/src/narrative/journey-progress.ts`
+  (exports two independent channel fractions, not one blended value), `apps/assessment/src/narrative/JourneyTrail.tsx`
+  (renders two independent trails) (each with a test file).
 - Explicitly untouched: `session/bout-machine.ts` and its exhaustive `BoutState` key-set test,
   `feedback/cues.ts`, `styles/tokens.css`, `copy.ts`, `closing/ClosingBeat.tsx`, everything under
   `packages/`. `BoutScreen.test.tsx`'s existing `assertNoScoreLikeText()` assertions must keep passing
