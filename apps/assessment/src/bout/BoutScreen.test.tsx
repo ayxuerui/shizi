@@ -117,7 +117,7 @@ describe("BoutScreen (assessment spec: 'No visible scoring or failure state', 'N
     tap(options[0]!);
 
     await screen.findByText(/悟空到家了/, {}, { timeout: 3000 });
-    const loved = await screen.findByRole("button", { name: COPY.parentRating.loved });
+    const loved = await screen.findByRole("button", { name: COPY.parentRating.loved.label });
     tap(loved);
 
     await waitFor(async () => {
