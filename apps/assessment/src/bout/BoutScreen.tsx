@@ -27,7 +27,7 @@ export interface BoutScreenProps {
 export function BoutScreen({ pool: poolProp, config }: BoutScreenProps = {}) {
   const sessionId = useMemo(() => crypto.randomUUID(), []);
   const pool = useMemo(() => poolProp ?? loadCandidatePool(), [poolProp]);
-  const { state, submitResponse, rate, skipRating } = useAssessmentSession({
+  const { state, submitResponse, rate, skipRating, timing } = useAssessmentSession({
     sessionId,
     pool,
     ...(config ? { config } : {}),
@@ -52,7 +52,11 @@ export function BoutScreen({ pool: poolProp, config }: BoutScreenProps = {}) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1.5rem" }}>
-      <NarrativeStage beatIndex={state.beatIndex} />
+      <NarrativeStage
+        beatIndex={state.beatIndex}
+        timing={timing}
+        complete={state.phase === "closing" || state.phase === "done"}
+      />
       {(state.phase === "probing" || state.phase === "resolving") && state.probe && (
         <ProbePanel
           probe={state.probe}

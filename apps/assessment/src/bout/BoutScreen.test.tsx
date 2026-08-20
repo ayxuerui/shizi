@@ -117,7 +117,7 @@ describe("BoutScreen (assessment spec: 'No visible scoring or failure state', 'N
     tap(options[0]!);
 
     await screen.findByText(/悟空到家了/, {}, { timeout: 3000 });
-    const loved = await screen.findByRole("button", { name: COPY.parentRating.loved });
+    const loved = await screen.findByRole("button", { name: COPY.parentRating.loved.label });
     tap(loved);
 
     await waitFor(async () => {
@@ -125,6 +125,25 @@ describe("BoutScreen (assessment spec: 'No visible scoring or failure state', 'N
       expect(pending).toHaveLength(1);
       expect(pending[0]).toMatchObject({ rating: "loved" });
       expect(pending[0]!.sessionId).toBeTruthy();
+    });
+    assertNoScoreLikeText();
+  });
+
+  it("shows the journey-trail progress cue mid-bout, and it reaches 100% at the closing beat regardless of which bound fired (add-journey-time-cue)", async () => {
+    render(<BoutScreen config={{ ...DEFAULT_ASSESSMENT_SESSION_CONFIG, maxItems: 1 }} />);
+    await screen.findAllByRole("button", { name: /^[一-鿿]$/ });
+
+    const trail = screen.getByTestId("journey-trail");
+    expect(trail).toBeInTheDocument();
+    assertNoScoreLikeText();
+
+    const options = screen.getAllByRole("button", { name: /^[一-鿿]$/ });
+    tap(options[0]!);
+
+    await screen.findByText(/悟空到家了/, {}, { timeout: 3000 });
+    const fill = screen.getByTestId("journey-trail").querySelector("div") as HTMLDivElement;
+    await waitFor(() => {
+      expect(fill.style.width).toBe("100%");
     });
     assertNoScoreLikeText();
   });

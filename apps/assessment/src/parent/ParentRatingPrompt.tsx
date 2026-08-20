@@ -26,14 +26,14 @@ export function ParentRatingPrompt({ onRate, onSkip }: ParentRatingPromptProps) 
     <div style={{ marginTop: "1.5rem" }}>
       <p>{COPY.parentRating.prompt}</p>
       <div style={{ display: "flex", gap: "var(--tap-gap)", justifyContent: "center", flexWrap: "wrap" }}>
-        <TapTarget label={COPY.parentRating.loved} onActivate={() => rate("loved")}>
-          <span>{COPY.parentRating.loved}</span>
+        <TapTarget label={COPY.parentRating.loved.label} onActivate={() => rate("loved")}>
+          <span>{COPY.parentRating.loved.glyph}</span>
         </TapTarget>
-        <TapTarget label={COPY.parentRating.fine} onActivate={() => rate("fine")}>
-          <span>{COPY.parentRating.fine}</span>
+        <TapTarget label={COPY.parentRating.fine.label} onActivate={() => rate("fine")}>
+          <span>{COPY.parentRating.fine.glyph}</span>
         </TapTarget>
-        <TapTarget label={COPY.parentRating.checkedOut} onActivate={() => rate("checked-out")}>
-          <span>{COPY.parentRating.checkedOut}</span>
+        <TapTarget label={COPY.parentRating.checkedOut.label} onActivate={() => rate("checked-out")}>
+          <span>{COPY.parentRating.checkedOut.glyph}</span>
         </TapTarget>
       </div>
       <div style={{ marginTop: "0.5rem" }}>

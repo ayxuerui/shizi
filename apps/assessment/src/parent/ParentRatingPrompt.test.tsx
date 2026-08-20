@@ -21,7 +21,7 @@ describe("ParentRatingPrompt (task 7.4 / adaptivity-instrumentation spec: 'Paren
     const onRate = vi.fn();
     render(<ParentRatingPrompt onRate={onRate} onSkip={vi.fn()} />);
 
-    tap(screen.getByRole("button", { name: COPY.parentRating.loved }));
+    tap(screen.getByRole("button", { name: COPY.parentRating.loved.label }));
 
     expect(onRate).toHaveBeenCalledExactlyOnceWith("loved");
   });
@@ -30,8 +30,8 @@ describe("ParentRatingPrompt (task 7.4 / adaptivity-instrumentation spec: 'Paren
     const onRate = vi.fn();
     render(<ParentRatingPrompt onRate={onRate} onSkip={vi.fn()} />);
 
-    tap(screen.getByRole("button", { name: COPY.parentRating.fine }));
-    tap(screen.getByRole("button", { name: COPY.parentRating.checkedOut }));
+    tap(screen.getByRole("button", { name: COPY.parentRating.fine.label }));
+    tap(screen.getByRole("button", { name: COPY.parentRating.checkedOut.label }));
 
     expect(onRate).toHaveBeenNthCalledWith(1, "fine");
     expect(onRate).toHaveBeenNthCalledWith(2, "checked-out");
@@ -46,5 +46,21 @@ describe("ParentRatingPrompt (task 7.4 / adaptivity-instrumentation spec: 'Paren
 
     expect(onSkip).toHaveBeenCalledOnce();
     expect(onRate).not.toHaveBeenCalled();
+  });
+
+  it("renders an emoji glyph as visible content, while the accessible name stays the Chinese label (parent-rating-emoji-labels)", () => {
+    render(<ParentRatingPrompt onRate={vi.fn()} onSkip={vi.fn()} />);
+
+    const loved = screen.getByRole("button", { name: COPY.parentRating.loved.label });
+    const fine = screen.getByRole("button", { name: COPY.parentRating.fine.label });
+    const checkedOut = screen.getByRole("button", { name: COPY.parentRating.checkedOut.label });
+
+    expect(loved).toHaveTextContent(COPY.parentRating.loved.glyph);
+    expect(fine).toHaveTextContent(COPY.parentRating.fine.glyph);
+    expect(checkedOut).toHaveTextContent(COPY.parentRating.checkedOut.glyph);
+
+    // The Chinese label itself must NOT be the visible text anymore —
+    // only the emoji is, confirming this isn't just an additive change.
+    expect(loved).not.toHaveTextContent(COPY.parentRating.loved.label);
   });
 });
