@@ -128,4 +128,25 @@ describe("BoutScreen (assessment spec: 'No visible scoring or failure state', 'N
     });
     assertNoScoreLikeText();
   });
+
+  it("shows the journey-trail progress cue mid-bout, and it reaches 100% at the closing beat regardless of which bound fired (add-journey-time-cue)", async () => {
+    render(<BoutScreen config={{ ...DEFAULT_ASSESSMENT_SESSION_CONFIG, maxItems: 1 }} />);
+    await screen.findAllByRole("button", { name: /^[一-鿿]$/ });
+
+    const trail = screen.getByTestId("journey-trail");
+    expect(trail).toBeInTheDocument();
+    assertNoScoreLikeText();
+
+    const options = screen.getAllByRole("button", { name: /^[一-鿿]$/ });
+    tap(options[0]!);
+
+    await screen.findByText(/悟空到家了/, {}, { timeout: 3000 });
+    const timeFill = screen.getByTestId("journey-trail-time").querySelector("div") as HTMLDivElement;
+    const itemFill = screen.getByTestId("journey-trail-item").querySelector("div") as HTMLDivElement;
+    await waitFor(() => {
+      expect(timeFill.style.width).toBe("100%");
+      expect(itemFill.style.width).toBe("100%");
+    });
+    assertNoScoreLikeText();
+  });
 });

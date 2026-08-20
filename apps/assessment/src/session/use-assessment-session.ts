@@ -1,6 +1,7 @@
-import { useEffect, useReducer, useRef } from "react";
+import { useEffect, useMemo, useReducer, useRef } from "react";
 import {
   AssessmentSession,
+  DEFAULT_ASSESSMENT_SESSION_CONFIG,
   type AssessmentSessionConfig,
   type NextProbeResult,
   type SessionDeps,
@@ -11,6 +12,7 @@ import type { ArmAssignment, Rating, SessionRating } from "@shizi/adaptivity";
 import { enqueueAssignments, enqueueEvent, enqueueRating, loadPriorEvents } from "../offline/event-queue.js";
 import { flushQueue } from "../offline/sync.js";
 import { boutReducer, INITIAL_BOUT_STATE, type BoutState } from "./bout-machine.js";
+import { createSessionClock } from "./session-clock.js";
 
 /** After a response, how long the (already-neutral) cue is visible
  * before the narrative moves on to the next beat — long enough to
@@ -47,11 +49,23 @@ export interface UseAssessmentSessionOptions {
   onRating?: (rating: SessionRating) => void | Promise<void>;
 }
 
+/** Read by `narrative/JourneyTrail.tsx` — see `journey-progress.ts` for
+ * what these feed into. `elapsedSinceStartMs` is a function, not a
+ * snapshotted number, so each read reflects the current wall-clock
+ * position rather than the value at the moment `useAssessmentSession`
+ * last rendered. */
+export interface SessionTiming {
+  elapsedSinceStartMs: () => number | null;
+  maxDurationMs: number;
+  maxItems: number;
+}
+
 export interface UseAssessmentSessionResult {
   state: BoutState;
   submitResponse: (selected: string) => void;
   rate: (rating: Rating) => void;
   skipRating: () => void;
+  timing: SessionTiming;
 }
 
 /**
@@ -84,6 +98,22 @@ export function useAssessmentSession(options: UseAssessmentSessionOptions): UseA
   const shownAtRef = useRef<number | null>(null);
   const initializedRef = useRef(false);
   const resolveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // One clock per mount, passed into the engine's own SessionDeps.elapsedMs
+  // below — its constructor read latches the origin `JourneyTrail` reads
+  // via `timing.elapsedSinceStartMs`, so the two can never drift apart.
+  const clockRef = useRef<ReturnType<typeof createSessionClock> | null>(null);
+  clockRef.current ??= createSessionClock(deps?.elapsedMs ? { elapsedMs: deps.elapsedMs } : {});
+  const clock = clockRef.current;
+
+  const resolvedConfig = config ?? DEFAULT_ASSESSMENT_SESSION_CONFIG;
+  const timing: SessionTiming = useMemo(
+    () => ({
+      elapsedSinceStartMs: clock.elapsedSinceStartMs,
+      maxDurationMs: resolvedConfig.maxDurationMs,
+      maxItems: resolvedConfig.maxItems,
+    }),
+    [clock, resolvedConfig.maxDurationMs, resolvedConfig.maxItems],
+  );
 
   // A component that unmounts mid-"resolving" must not fire its pending
   // next-probe dispatch afterward — an uncancelled timer here would leak
@@ -123,7 +153,7 @@ export function useAssessmentSession(options: UseAssessmentSessionOptions): UseA
         pool,
         priorEvents,
         ...(config ? { config } : {}),
-        ...(deps ? { deps } : {}),
+        deps: { ...deps, elapsedMs: clock.elapsedMs },
       });
       requestNextProbe();
     })();
@@ -185,5 +215,5 @@ export function useAssessmentSession(options: UseAssessmentSessionOptions): UseA
     dispatch({ type: "RATING_SKIPPED" });
   }
 
-  return { state, submitResponse, rate, skipRating };
+  return { state, submitResponse, rate, skipRating, timing };
 }
