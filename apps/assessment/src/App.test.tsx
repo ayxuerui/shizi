@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
 import { __resetDBForTests } from "./offline/db.js";
 import { App } from "./App.js";
@@ -61,5 +61,40 @@ describe("App (task 8.3: first-gesture audio-unlock screen; task 9.4: published-
     expect(await screen.findByText(/Diagnostics \(task 10.0/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "点一下开始" })).not.toBeInTheDocument();
     window.location.hash = "";
+  });
+
+  describe("add-dev-deployment: EnvBadge containment (specs/deployment/spec.md: 'Deployed builds declare their environment')", () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it("shows the environment marker on the unlock screen for a dev build", async () => {
+      vi.stubEnv("VITE_APP_ENV", "dev");
+      render(<App />);
+      await screen.findByRole("button", { name: "点一下开始" });
+      expect(screen.getByLabelText("environment: dev")).toBeInTheDocument();
+    });
+
+    it("never carries the environment marker into the child-facing bout tree, even for a dev build", async () => {
+      vi.stubEnv("VITE_APP_ENV", "dev");
+      render(<App />);
+      const unlockButton = await screen.findByRole("button", { name: "点一下开始" });
+      expect(screen.getByLabelText("environment: dev")).toBeInTheDocument();
+
+      tap(unlockButton);
+      await screen.findByTestId("wukong");
+
+      // The marker is gone along with the rest of the unlock screen — it
+      // must never render inside the bout tree BoutScreen.test.tsx's own
+      // assertNoScoreLikeText guarantee protects (that check only catches
+      // digits/"%", not a "DEV" label, so this needs its own assertion).
+      expect(screen.queryByLabelText("environment: dev")).not.toBeInTheDocument();
+    });
+
+    it("shows no environment marker at all for a default (production) build", async () => {
+      render(<App />);
+      await screen.findByRole("button", { name: "点一下开始" });
+      expect(screen.queryByLabelText(/^environment:/)).not.toBeInTheDocument();
+    });
   });
 });

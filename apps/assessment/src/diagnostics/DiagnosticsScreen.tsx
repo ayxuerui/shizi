@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { EnvBadge } from "../components/EnvBadge.js";
 import { probeElementPlayback, describeAudioUnlock, describeSharedContext, probeWebAudioPath } from "./capabilities/audio.js";
 import { requestPersistence, probeStorage } from "./capabilities/storage.js";
 import { describeEnvironment, probeServiceWorker } from "./capabilities/service-worker.js";
@@ -215,6 +216,7 @@ export function DiagnosticsScreen({ onExit }: DiagnosticsScreenProps) {
 
   return (
     <div style={{ fontFamily: DIAGNOSTICS_FONT_FAMILY, padding: "1rem", maxWidth: "640px", margin: "0 auto" }}>
+      <EnvBadge />
       <h1 style={{ fontSize: "1.1rem" }}>Diagnostics (task 10.0 pre-flight)</h1>
       <p style={{ fontSize: "0.85rem" }}>
         standalone={String(report.context.standalone)} online={String(report.context.online)}
