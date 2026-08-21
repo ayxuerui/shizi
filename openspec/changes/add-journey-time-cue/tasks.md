@@ -88,3 +88,14 @@
       the trail's motion is noticeable to the child during a hesitation, and whether it changes behavior —
       per design.md's honestly-stated risk. Record the observation; removing the `timing` prop is a
       two-line revert if warranted.
+
+## 7. Archive status
+
+This change's code is merged (PR #6) and its `assessment` delta spec has been synced into the main spec
+at `openspec/specs/assessment/spec.md` (the "Elapsed-bout progress cue is non-numeric" scenario now lives
+there). **The change is nevertheless deliberately left un-archived**, not overlooked: task 6.1 above is a
+genuine on-device observation gated on `bootstrap-shizi-assessment` task 10.2 (the first real session with
+the child), and `openspec validate --archived` expects every task in an archived change to be complete.
+Archiving now would mean either tripping that lint or checking off a box for an observation nobody has
+actually made — so the change stays open until the session happens. Archive it once 6.1 is genuinely
+answered. Nothing else in this change is outstanding.
