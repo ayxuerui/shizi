@@ -8,6 +8,10 @@ coverage/
 .env
 .env.*
 !.env.example
+# Per-environment example files (add-dev-deployment), e.g.
+# .env.dev.example — still just templates with no real secrets, same as
+# .env.example above.
+!.env.*.example
 
 # Vite
 .vite/

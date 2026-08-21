@@ -1,0 +1,101 @@
+# The non-production counterpart to docker-compose.yml — see
+# openspec/changes/add-dev-deployment for the why. Reached at
+# shizi-dev.realxco.com (a second Cloudflare Zero Trust public hostname,
+# the user's own dashboard action — nothing in this repo can create it,
+# same as shizi.realxco.com's original repoint in infra/README.md).
+#
+# Deliberately a SEPARATE container, not a second `server_name` block on
+# the existing `shizi-gateway` — editing or restarting dev must never
+# touch the container serving the child's live app. See design.md's "A
+# second hostname, deviating from the one-domain-one-holding-service
+# principle" and "Separate gateway container, not a server_name block".
+#
+# ONE DEV STACK AT A TIME: container_name is hardcoded below (so the
+# Zero Trust entry has a stable target), which means a second `docker
+# compose -f docker-compose.dev.yml up` from a different checkout/
+# worktree will collide with this one rather than silently stealing
+# traffic. Tear this stack down (`docker compose -f
+# docker-compose.dev.yml down`) before verifying a different checkout.
+#
+# Run from whatever tree holds the build you're verifying:
+#   npm run build --workspace=apps/assessment -- --mode dev
+#   docker compose -f docker-compose.dev.yml up -d --build
+name: shizi-dev
+
+services:
+  # The dev counterpart of docker-compose.yml's `gateway`. Serves
+  # whatever is in THIS checkout's apps/assessment/dist — build it with
+  # `--mode dev` first (see apps/assessment/.env.dev.example) so the PWA
+  # manifest names itself "shizi dev" and the unlock/diagnostics screens
+  # show the environment badge, distinguishing it on-device from the
+  # real app installed from shizi.realxco.com.
+  #
+  # Joined to BOTH networks: cloudflared-net (external — so the tunnel
+  # can reach it, exactly like prod's gateway) and shizi-dev-net (so it
+  # can reach sync-dev without sync-dev ever touching cloudflared-net —
+  # see that service's own comment for why).
+  gateway-dev:
+    image: nginx:1.27-alpine
+    container_name: shizi-gateway-dev
+    ports:
+      - "8082:80"
+    volumes:
+      - ./apps/assessment/dist:/usr/share/nginx/html:ro
+      # The SAME template file prod's gateway mounts — one shared source
+      # of truth for routing (design.md's "One nginx config, rendered
+      # per stack"). Only SYNC_UPSTREAM below differs.
+      - ./infra/nginx-assessment.conf.template:/etc/nginx/templates/default.conf.template:ro
+    environment:
+      SYNC_UPSTREAM: sync-dev
+      NGINX_ENVSUBST_FILTER: "^SYNC_UPSTREAM$$"
+    restart: unless-stopped
+    networks:
+      - cloudflared-net
+      - shizi-dev-net
+
+  # The dev counterpart of docker-compose.yml's `sync`. Its own token,
+  # its own SQLite volume, its own event history — never the same as
+  # production's (specs/deployment/spec.md's "a credential leaked from
+  # one environment does not open the other").
+  #
+  # On shizi-dev-net ONLY, never cloudflared-net. Both stacks would
+  # otherwise alias a service on that shared network — two containers
+  # both effectively answering to a `sync`-like name on the same bridge
+  # gives nginx nondeterministic round-robin DNS to pick from. Naming
+  # this `sync-dev` already avoids a literal name collision; keeping it
+  # off the shared network entirely makes the collision structurally
+  # impossible rather than just avoided by convention (design.md).
+  #
+  # SHIZI_ENV=dev is read by pull-events.ts (infra/sync-service/scripts)
+  # to refuse writing the repo's canonical data/events/*.jsonl from this
+  # store — dev event data is disposable by design and must never reach
+  # the durable learner record.
+  sync-dev:
+    build:
+      context: .
+      dockerfile: infra/sync-service/Dockerfile
+    container_name: shizi-sync-dev
+    env_file:
+      - ./infra/sync-service/.env.dev
+    environment:
+      PORT: 8787
+      EVENTS_DB_PATH: /repo/infra/sync-service/data/events.sqlite
+      BACKUP_DIR: /repo/infra/sync-service/data/backups
+      SHIZI_ENV: dev
+    volumes:
+      - dev-events-data:/repo/infra/sync-service/data
+    restart: unless-stopped
+    networks:
+      - shizi-dev-net
+
+volumes:
+  dev-events-data:
+
+networks:
+  cloudflared-net:
+    name: cloudflared-net
+    external: true
+  # Private to this stack — not external, not shared with prod. Created
+  # and torn down with this compose file; nothing else should reference
+  # it by name.
+  shizi-dev-net:

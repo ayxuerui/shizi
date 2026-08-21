@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { EnvBadge } from "../components/EnvBadge.js";
 import { TapTarget } from "../components/TapTarget.js";
 import { COPY } from "../copy.js";
 import { DiagnosticsCornerTrigger } from "../diagnostics/DiagnosticsCornerTrigger.js";
@@ -46,6 +47,12 @@ export function AudioUnlockGate({ children, onDiagnosticsRequest }: AudioUnlockG
     }
   };
 
+  // `children` (the child's actual bout/session tree) renders alone once
+  // unlocked — no EnvBadge wrapping it. That's what keeps the badge out
+  // of the child-facing activity (specs/deployment/spec.md's "the marker
+  // never enters the child-facing activity"): it only ever renders below,
+  // on this screen, which every cold start shows and which is gone the
+  // instant `unlocked` flips.
   if (unlocked) return <>{children}</>;
 
   return (
@@ -55,6 +62,7 @@ export function AudioUnlockGate({ children, onDiagnosticsRequest }: AudioUnlockG
         <span style={{ fontSize: "1.5rem" }}>{COPY.audioUnlock.tapToStart}</span>
       </TapTarget>
       {onDiagnosticsRequest && <DiagnosticsCornerTrigger onTrigger={onDiagnosticsRequest} />}
+      <EnvBadge />
     </div>
   );
 }
