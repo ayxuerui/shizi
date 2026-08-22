@@ -30,6 +30,14 @@ services:
   # show the environment badge, distinguishing it on-device from the
   # real app installed from shizi.realxco.com.
   #
+  # harden-prod-deployment: production's gateway now BAKES its dist/ and
+  # nginx template into an image instead of bind-mounting them (see
+  # docker-compose.yml). This service deliberately does NOT follow —
+  # bind-mounting a working tree is precisely what a dev/verification
+  # environment is for, and specs/deployment/spec.md's "Non-production
+  # may serve directly from a working tree" requirement exists so this
+  # asymmetry is never later "fixed" back into symmetry with prod.
+  #
   # Joined to BOTH networks: cloudflared-net (external — so the tunnel
   # can reach it, exactly like prod's gateway) and shizi-dev-net (so it
   # can reach sync-dev without sync-dev ever touching cloudflared-net —
@@ -41,9 +49,11 @@ services:
       - "8082:80"
     volumes:
       - ./apps/assessment/dist:/usr/share/nginx/html:ro
-      # The SAME template file prod's gateway mounts — one shared source
-      # of truth for routing (design.md's "One nginx config, rendered
-      # per stack"). Only SYNC_UPSTREAM below differs.
+      # The SAME template file baked into prod's gateway image — one
+      # shared source of truth for routing (add-dev-deployment's "One
+      # nginx config, rendered per stack"). Only SYNC_UPSTREAM below
+      # differs. Bind-mounted here (not baked) because that's the whole
+      # point of this stack; see the header comment above.
       - ./infra/nginx-assessment.conf.template:/etc/nginx/templates/default.conf.template:ro
     environment:
       SYNC_UPSTREAM: sync-dev
@@ -75,8 +85,12 @@ services:
       context: .
       dockerfile: infra/sync-service/Dockerfile
     container_name: shizi-sync-dev
+    # harden-prod-deployment: same durable-location treatment as prod's
+    # sync service — an absolute path outside every git working tree,
+    # not `./infra/sync-service/.env.dev`. Create it per infra/README.md's
+    # dev setup steps before bringing this stack up.
     env_file:
-      - ./infra/sync-service/.env.dev
+      - /home/ubuntu/.config/shizi/dev.env
     environment:
       PORT: 8787
       EVENTS_DB_PATH: /repo/infra/sync-service/data/events.sqlite

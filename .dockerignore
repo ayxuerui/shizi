@@ -1,0 +1,47 @@
+# harden-prod-deployment: there was no .dockerignore before this, so both
+# image builds (sync, and now gateway) shipped whatever happened to be on
+# disk in the build context — including, confirmed directly, the real
+# .env files (SYNC_SHARED_TOKEN/VITE_SYNC_TOKEN) getting baked into the
+# sync image's filesystem layer. Not a severity escalation on its own
+# (the matching client-side token already ships in the public JS bundle
+# by this project's own "shared token, not accounts" design — see
+# bootstrap-shizi-assessment's design.md), but there is no reason to keep
+# repeating it, and a real secret landing here later would be a genuine
+# leak. Excluded explicitly, mirroring .gitignore's own pattern.
+# A bare pattern (no `/`) only matches at the build-context ROOT in
+# Docker's ignore semantics, unlike .gitignore's implicit recursion —
+# confirmed the hard way twice while writing this file: first with
+# nested .env files not being excluded, then with nested
+# tsconfig.tsbuildinfo files not being excluded (which then confused
+# `tsc -b` into thinking packages were already built when their actual
+# dist/ output had correctly been excluded — a real, silently-broken
+# build, not a hypothetical). Every pattern below that needs to match
+# at any depth uses an explicit `**/` prefix; nothing here relies on
+# bare-pattern recursion.
+.env
+.env.*
+!.env.*.example
+**/.env
+**/.env.*
+!**/.env.*.example
+
+node_modules/
+**/node_modules/
+.git/
+.claude/
+dist/
+**/dist/
+spikes/
+coverage/
+**/coverage/
+*.tsbuildinfo
+**/*.tsbuildinfo
+openspec/
+
+# Published learner config is runtime-generated derived data, never a
+# build input (harden-prod-deployment's "Immutable app, mutable config"
+# decision — see docker-compose.yml's gateway service comment). Without
+# this, Vite's own public/ -> dist/ copy step would silently bake
+# whatever happened to be on the host at BUILD time into the image, and
+# the runtime bind-mount would only mask that staleness, not prevent it.
+apps/assessment/public/config.json

@@ -39,34 +39,58 @@ services:
   # from it. Per design.md's self-hosted decision (Cloudflare
   # Pages/Worker/D1 → self-hosted, no Cloudflare account needed) — same
   # pattern as `spikes` above, just serving a real build instead of raw
-  # spike HTML. Build on the host first:
-  #   npm run build --workspace=apps/assessment
-  # then `docker compose up gateway`. Reuses shizi.realxco.com (already
-  # tunneled, previously pointed at `spikes`) rather than a second
-  # hostname — the app is served under /assessment/ (matching
-  # vite.config.ts's `base`), and nginx also reverse-proxies
-  # /assessment/sync/* to the `sync` service below (see
-  # infra/nginx-assessment.conf), so the app and its sync endpoint are
-  # same-origin. A future second app would get its own path prefix on this
-  # same container rather than a second tunnel target. The ONE dashboard
-  # action needed: repoint that hostname's target service from `spikes` to
-  # `shizi-gateway` in the Cloudflare Zero Trust dashboard — see
-  # infra/README.md.
+  # spike HTML.
+  #
+  # harden-prod-deployment: this now BUILDS an image
+  # (infra/gateway.Dockerfile) rather than bind-mounting a host-built
+  # apps/assessment/dist — production no longer depends on any git
+  # checkout existing on disk at all (see that change's design.md). A new
+  # release is a deliberate `docker compose build gateway && docker
+  # compose up -d gateway` from the deploy clone (infra/README.md), not a
+  # side effect of building or deleting files in some working tree.
+  # `docker-compose.dev.yml`'s gateway keeps bind-mounting its working
+  # tree ON PURPOSE — reflecting whatever's under verification is
+  # precisely dev's job, and that asymmetry with prod must not be "fixed"
+  # into symmetry (specs/deployment/spec.md's "Non-production may serve
+  # directly from a working tree").
+  #
+  # Reuses shizi.realxco.com (already tunneled, previously pointed at
+  # `spikes`) rather than a second hostname — the app is served under
+  # /assessment/ (matching vite.config.ts's `base`), and nginx also
+  # reverse-proxies /assessment/sync/* to the `sync` service below (see
+  # infra/nginx-assessment.conf.template), so the app and its sync
+  # endpoint are same-origin. A future second app would get its own path
+  # prefix on this same container rather than a second tunnel target.
   gateway:
-    image: nginx:1.27-alpine
+    build:
+      context: .
+      dockerfile: infra/gateway.Dockerfile
+      args:
+        # Same-origin relative path — no CORS, no second hostname (see
+        # infra/README.md's "Domain reuse"). VITE_SYNC_TOKEN comes from
+        # the shell environment at build/release time (infra/README.md's
+        # release procedure), not from a file baked into any image layer.
+        VITE_SYNC_ENDPOINT: /assessment/sync
+        VITE_SYNC_TOKEN: ${VITE_SYNC_TOKEN}
+    image: shizi-gateway:latest
     container_name: shizi-gateway
     ports:
       - "8081:80"
     volumes:
-      - ./apps/assessment/dist:/usr/share/nginx/html:ro
-      # A TEMPLATE, not a finished config, and mounted under
-      # /etc/nginx/templates/ rather than /etc/nginx/conf.d/ so the stock
-      # nginx:alpine entrypoint runs envsubst over it at start. The dev
-      # stack mounts this exact same file (docker-compose.dev.yml) with a
-      # different SYNC_UPSTREAM — one shared source of truth, so a routing
-      # rule can't be present in one environment and silently absent from
-      # the other. See infra/nginx-assessment.conf.template's own header.
-      - ./infra/nginx-assessment.conf.template:/etc/nginx/templates/default.conf.template:ro
+      # Published learner config is derived data
+      # (infra/sync-service/scripts/publish-config.ts), regenerated on
+      # its own cadence independent of the app — mounting only this ONE
+      # file (not the whole served root, and not baked into the image)
+      # lets it update with no rebuild and no release. A missing or
+      # malformed file here is already a handled case, not a special one:
+      # apps/assessment/src/session/published-config.ts's
+      # loadPublishedConfig() falls back to its bundled pool on ANY
+      # fetch/parse failure. The host file must exist (even empty) before
+      # the FIRST `docker compose up` here — Docker creates an empty
+      # DIRECTORY at this path instead of a file if it doesn't already
+      # exist, which is not what either side expects — see
+      # infra/README.md's setup steps.
+      - ./apps/assessment/public/config.json:/usr/share/nginx/html/config.json:ro
     environment:
       # Prod's gateway reaches prod's sync service and nothing else. Both
       # stacks sit on cloudflared-net, and docker aliases every container
@@ -83,10 +107,9 @@ services:
       - cloudflared-net
 
   # Tasks 9.2/9.3: the sync endpoint + event store (self-hosted SQLite,
-  # not Cloudflare D1 — see design.md). Requires a .env file (see
-  # infra/sync-service/.env.example) with SYNC_SHARED_TOKEN set; the
-  # service refuses to start without it. `events-data` persists the live
-  # SQLite file + backup snapshots across container restarts — the
+  # not Cloudflare D1 — see design.md). Requires SYNC_SHARED_TOKEN set;
+  # the service refuses to start without it. `events-data` persists the
+  # live SQLite file + backup snapshots across container restarts — the
   # ACTUAL durable backup is data/events/events.jsonl (see
   # infra/sync-service/scripts/pull-events.ts), committed to git, not
   # this volume. No host port published: reached only via `gateway`'s
@@ -100,8 +123,15 @@ services:
       context: .
       dockerfile: infra/sync-service/Dockerfile
     container_name: shizi-sync
+    # harden-prod-deployment: an ABSOLUTE path outside every git working
+    # tree, not `./infra/sync-service/.env` — this file must survive a
+    # `git clean -xfd`, a branch switch, or a worktree deletion in the
+    # checkout this compose file happens to be run from. Create it per
+    # infra/README.md's setup steps; it also supplies VITE_SYNC_TOKEN for
+    # the gateway's build (see that service's `args:` above) via being
+    # `source`d directly, not through this env_file mechanism.
     env_file:
-      - ./infra/sync-service/.env
+      - /home/ubuntu/.config/shizi/prod.env
     environment:
       PORT: 8787
       EVENTS_DB_PATH: /repo/infra/sync-service/data/events.sqlite
