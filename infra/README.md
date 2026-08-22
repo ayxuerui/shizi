@@ -117,6 +117,25 @@ built against the new token. There is no way around this coupling; it's the cost
 token rather than per-client credentials, accepted at this project's scale (see
 `bootstrap-shizi-assessment`'s design.md).
 
+**Published learner config lives here too** (`~/.config/shizi/config.json`), for the same reason:
+it must survive the deploy clone disappearing. **Found the hard way, not anticipated up front:**
+this file originally lived inside the deploy clone, and deleting that clone (task 6.4's own
+verification) left the gateway container unable to even *start* on the next restart — a bind
+mount whose source directory is gone isn't a "missing file" the app's fallback can help with; the
+container itself fails. Fixed by moving it here (see
+`openspec/changes/harden-prod-deployment/design.md`'s "Immutable app, mutable config" entry for
+the full account). Publish to it explicitly:
+
+```
+mkdir -p ~/.config/shizi && touch ~/.config/shizi/config.json && chmod 644 ~/.config/shizi/config.json
+npx tsx scripts/publish-config.ts --out ~/.config/shizi/config.json    # from infra/sync-service/
+```
+
+Not a secret — `chmod 644` (world-readable) is correct here, unlike `prod.env`/`dev.env` above.
+The `touch` step matters even before the first real publish: Docker creates an empty *directory*
+at a bind-mount path that doesn't exist yet, not a missing file, which is not what either side
+expects.
+
 ## Releasing a new version
 
 From the deploy clone (`~/deploy/shizi` — see "Where production runs from" below), never from a

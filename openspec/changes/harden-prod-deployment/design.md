@@ -92,6 +92,26 @@ arguably more correct for data that should be fresh, and the offline path is alr
 the bundled-pool fallback — but it is a real behavior change from "precached like every other
 asset," and `scripts/check-precache.mjs` should be checked for whether it cares.
 
+**Found live, by actually deleting the deploy clone during task 6.4's verification, not
+anticipated in the original decision above:** the host-mounted `config.json` was first placed at
+a path inside the deploy clone (`apps/assessment/public/config.json`). That satisfies the
+"blast radius is bounded" reasoning above only for the *file-missing-at-the-app-level* case
+(`published-config.ts`'s fetch fails, falls back — true). It does **not** cover the case this
+change's entire spec is actually about: the deploy clone itself disappearing. A bind mount's
+*source directory* going away doesn't produce a missing file the running application can
+gracefully react to — it makes the **container fail to even start** on the next restart or
+recreate (`OCI runtime create failed: ... not a directory`), which is a strictly worse failure
+than anything `loadPublishedConfig()`'s try/catch was written to handle. This caused a real,
+if brief, production outage during this change's own verification — confirmed, then fixed
+immediately (see "Risks / Trade-offs").
+
+**Corrected decision:** `config.json`'s host path moved to `~/.config/shizi/config.json` —
+outside every git working tree, the exact same durable-location treatment already given to the
+shared token, rather than a second, weaker convention. `publish-config.ts` gained an `--out`
+option so production can target that path explicitly while its default (repo-relative) behavior
+stays unchanged for local/dev use. The original reasoning above (why config is a host mount and
+not baked into the image at all) still holds; only *which* host path was wrong.
+
 ### Credentials live outside every working tree
 
 **Decision:** `.env` files move to a durable host location (`~/.config/shizi/`), referenced by
@@ -155,6 +175,15 @@ bind-mounted from the deploy clone instead of baking it — at the cost of one h
   means "no host paths at all" is not literally true after this change. The spec is written to
   match what is actually built: production must keep *serving* with no checkout present, which
   holds because a missing config falls back.
+- **Materialized as a real, if brief, production outage during this change's own verification** →
+  task 6.4's test (delete the deploy clone entirely, restart the gateway) was written to prove
+  exactly this risk was handled — and the first time it actually ran, it wasn't: the config mount
+  originally lived inside the deploy clone, so deleting it left the gateway container unable to
+  even start on restart (502, not a graceful degrade). Restored immediately by putting the clone
+  back; root-caused and fixed by moving the mount source to `~/.config/shizi/config.json` (see
+  "Immutable app, mutable config" above). Recorded here rather than quietly patched, because it's
+  a real demonstration of exactly the failure category this whole change exists to prevent,
+  caught by actually running the destructive test rather than reasoning about it on paper.
 - **Moving `.env` is the one step that can break production if fumbled** → its current copy is the
   only one on disk, though the running container still holds the value in its environment.
   Capture the value first, verify the new location, and only then recreate the container.
