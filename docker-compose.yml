@@ -1,15 +1,17 @@
 # Pinned explicitly (add-dev-deployment) rather than left to default to
 # the launching directory's name. Without this, the compose PROJECT name
-# — and therefore every unqualified volume name, e.g. `events-data` here
-# becoming `<dirname>_events-data` — is derived from whatever checkout
-# this file is run from. This repo's containers have been launched from
-# a throwaway git worktree, so the live event-store volume was
-# `bridge-cse_014e5ybp6lpcxeuz1ssuf4ra_events-data` until this pin: a
-# fixed name here, plus the already-fixed `container_name`s below, is
-# what makes production's identity independent of which checkout starts
-# it (see specs/deployment/spec.md's "Production identity is independent
-# of the working copy"). See infra/README.md for the one-time volume
-# migration this required.
+# — and therefore any unqualified volume name — is derived from whatever
+# checkout this file is run from. This repo's containers were once
+# launched from a throwaway git worktree, so the live event-store volume
+# was originally named after that worktree until this pin: a fixed name
+# here, plus the already-fixed `container_name`s below, is what makes
+# production's identity independent of which checkout starts it (see
+# specs/deployment/spec.md's "Production identity is independent of the
+# working copy"). See infra/README.md for that one-time volume migration.
+# (`harden-event-store` later moved the event store itself off a named
+# volume entirely, onto a fixed host bind mount — see `sync`'s `volumes:`
+# below — but `name: shizi` still matters for container-name/restart
+# consistency and any future unqualified resource this file declares.)
 name: shizi
 
 services:
@@ -121,14 +123,14 @@ services:
 
   # Tasks 9.2/9.3: the sync endpoint + event store (self-hosted SQLite,
   # not Cloudflare D1 — see design.md). Requires SYNC_SHARED_TOKEN set;
-  # the service refuses to start without it. `events-data` persists the
-  # live SQLite file + backup snapshots across container restarts — the
-  # ACTUAL durable backup is data/events/events.jsonl (see
-  # infra/sync-service/scripts/pull-events.ts), committed to git, not
-  # this volume. No host port published: reached only via `gateway`'s
-  # nginx reverse-proxy (/assessment/sync/*) over this shared docker
-  # network, not directly from outside it — nothing else needs to reach
-  # it. Use
+  # the service refuses to start without it. The bind mount below
+  # persists the live SQLite file + backup snapshots across container
+  # restarts — the ACTUAL durable backup is data/events/events.jsonl
+  # (see infra/sync-service/scripts/pull-events.ts), committed to git,
+  # not this directory. No host port published: reached only via
+  # `gateway`'s nginx reverse-proxy (/assessment/sync/*) over this
+  # shared docker network, not directly from outside it — nothing else
+  # needs to reach it. Use
   # `docker compose exec sync curl localhost:8787/health` for direct
   # local debugging if needed.
   sync:
@@ -154,14 +156,21 @@ services:
       # is really production (add-dev-deployment) — see sync-dev's own
       # SHIZI_ENV=dev in docker-compose.dev.yml.
       SHIZI_ENV: prod
+    # harden-event-store: a fixed host bind mount, not a Docker-managed
+    # named volume — so a host-side script (backup, ad hoc inspection)
+    # can reach the live store at a known path with no `docker volume
+    # inspect` step. Sibling to ~/.config/shizi/ (config/secrets):
+    # ~/.local/share/shizi/ is durable application DATA (the growing
+    # database and its own periodic snapshots), kept in a separate
+    # location so the two kinds of durable state don't get mixed (see
+    # design.md's "second durable-location convention" decision). The
+    # old `events-data` named volume from before this change is left
+    # in place, untouched, as the rollback path.
     volumes:
-      - events-data:/repo/infra/sync-service/data
+      - /home/ubuntu/.local/share/shizi/sync-data:/repo/infra/sync-service/data
     restart: unless-stopped
     networks:
       - cloudflared-net
-
-volumes:
-  events-data:
 
 networks:
   cloudflared-net:
