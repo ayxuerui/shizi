@@ -145,11 +145,14 @@ Claude Code session worktree or any other throwaway checkout:
 cd ~/deploy/shizi
 git pull
 set -a; source ~/.config/shizi/prod.env; set +a
-docker compose build gateway sync
+docker compose build gateway sync backup-cron
 docker tag shizi-gateway:latest shizi-gateway:$(date +%F)
-docker compose up -d gateway sync
+docker compose up -d gateway sync backup-cron
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8081/assessment/   # expect 200
 ```
+
+`backup-cron` doesn't need `VITE_SYNC_TOKEN` (it isn't in that build's `args:`), so it's harmless
+to include even though `prod.env` was sourced mainly for the gateway build above.
 
 **Rolling back** to the previous release:
 
@@ -204,32 +207,81 @@ from the same checkout that's serving production.
 up the event store" below). Tearing the whole stack down, including its volume
 (`docker compose -f docker-compose.dev.yml down -v`), loses nothing that matters.
 
+## Where production's data lives: `~/.local/share/shizi/`
+
+(`harden-event-store`.) The live SQLite file is a fixed host bind mount —
+`~/.local/share/shizi/sync-data/`, mounted into `sync` at `/repo/infra/sync-service/data` — not a
+Docker-managed named volume. This is deliberately a sibling to `~/.config/shizi/` (config and
+secrets), not the same directory: `~/.config/shizi/` holds small, largely hand-edited text;
+`~/.local/share/shizi/` holds durable, programmatically-written application *data* (the growing
+event database and its own periodic snapshots). Keeping them apart means "what's safe to
+`chmod`/back up/treat as sensitive" stays legible instead of accidental.
+
+Before this, the live store lived in a Docker-managed named volume (`events-data`), which worked
+but meant any host-side script needed `docker volume inspect ... --format '{{.Mountpoint}}'`
+just to find the file — an easy-to-get-wrong extra step that's now gone entirely. Migrated with
+the same stop/copy-with-checksums/swap discipline used for every prior migration in this project;
+the original `events-data` volume is left in place, untouched, as the rollback path.
+
+`docker-compose.dev.yml`'s `dev-events-data` deliberately stays a Docker-managed named volume —
+dev is meant to be trivially disposable (`docker compose down -v`), and its data is already
+disposable by design, so a fixed host path would only add cleanup burden for data nobody needs to
+keep.
+
 ## Backing up the event store
 
-The live SQLite file (`sync-service`'s `events-data` Docker volume) is **not** the durable copy —
-`data/events/events.jsonl`, committed to git via `pull-events.ts`, is. Run that script periodically
-(there's no built-in schedule; a cron job or a manual habit both work) and commit the result. The
-service also takes its own local snapshot every 6 hours (`sync-service/src/backup.ts`, kept on the
-same volume) as cheap insurance against the live file getting corrupted between JSONL pulls — that
-snapshot does **not** survive a lost disk on its own; true off-site backup would need external
-storage credentials nobody has supplied yet, and is an open item, not solved here.
+`data/events/events.jsonl` (and `ratings.jsonl`), committed to git via `pull-events.ts`, is the
+actual durable copy — not the live SQLite file. The `sync-service` also takes its own local
+snapshot every 6 hours (`sync-service/src/backup.ts`, kept alongside the live file) as cheap
+insurance against corruption between pulls — that snapshot does **not** survive a lost disk on
+its own; true off-site backup would need external storage credentials nobody has supplied, and
+remains an open item.
 
-**Run it on the host, not via `docker exec`.** `pull-events.ts` resolves its output relative to
-where the script *file* lives — correct when run on the host (`npm run pull:events` from
-`infra/sync-service`, pointed at the volume's real data via `EVENTS_DB_PATH`), but a no-op for the
-purpose of getting a git-committable file if run as `docker exec shizi-sync npx tsx
-scripts/pull-events.ts`: the Dockerfile bakes `/repo` in at build time (only the SQLite data
-directory is a real volume mount), so a write there lands in that container's own writable layer
-and is gone the next time the container is recreated. Find the volume's real host path with
-`docker volume inspect shizi_events-data --format '{{.Mountpoint}}'` and run, from
-`infra/sync-service`:
+**This now runs automatically, daily, with no person involved.** A dedicated container,
+`backup-cron` (`infra/backup-cron.Dockerfile`), runs a cron daemon whose one job
+(`infra/backup-cron/crontab`) invokes `infra/sync-service/scripts/backup-and-push.ts`: export,
+then commit and push only if the export actually changed — and even when it didn't, append a
+line to `data/events/backup-log.txt` so a quiet week and a stalled job are never confused with
+each other.
+
+**Why a container instead of the host's own crontab** (which is how this was first built and
+verified — see `openspec/changes/harden-event-store/design.md` for the full account): this
+project's other infrastructure (`gateway`, `sync`) is already fully containerized, and a host
+crontab entry would have been the one piece of it needing host SSH access and `crontab -l` to
+inspect or change. Check on it with ordinary Docker tooling instead:
 
 ```
-EVENTS_DB_PATH=<mountpoint>/events.sqlite npx tsx scripts/pull-events.ts
+docker exec shizi-backup-cron cat /etc/cron.d/shizi-backup   # the schedule
+docker logs shizi-backup-cron                                 # every run's output
+git log -1 --format=%cr -- data/events/                       # is it actually current?
 ```
+
+That last command is the whole health check. Because the export is byte-stable for unchanged
+data and strictly append-only, the timestamp of the most recent `data/events/` commit answers
+"is backup working" by itself — no separate dashboard or alerting to maintain.
+
+**`backup-cron` reuses the SAME deploy clone** the release workflow above operates on — bind-mounted
+read-write, not a second internal git clone — plus the deploy key and the event store, each
+bind-mounted at the exact absolute host path their respective configs already expect
+(`core.sshCommand`, `pull-events.ts`'s fixed default). `npm ci` runs into that bind-mounted clone
+at container start only if `node_modules` is missing, so the code that actually runs every day
+always matches whatever commit the clone is currently on.
+
+**A deploy key, not the interactive `gh auth` login**, is what the container pushes with —
+scoped to this one repository, created via `gh api repos/ayxuerui/shizi/keys`, private half at
+`~/.config/shizi/deploy-key` (0600; also record a copy in a password manager — nothing in this
+repo should be its only copy). The deploy clone's `origin` remote is the SSH form
+(`git@github.com:ayxuerui/shizi.git`) with `core.sshCommand` set **locally in that clone**
+(`git config core.sshCommand "ssh -i ~/.config/shizi/deploy-key -o IdentitiesOnly=yes"`) — not
+globally — so this identity is scoped to that one clone. That clone's `user.name`/`user.email`
+are also set locally, so `backup-cron`'s commits have an author identity; without it, the very
+first commit attempt fails with "Author identity unknown."
 
 **Dev's event store is disposable, on purpose (add-dev-deployment).** `docker-compose.dev.yml`'s
 `sync-dev` sets `SHIZI_ENV=dev`; `pull-events.ts` reads that and refuses to write the canonical
 `data/events/` location unless you pass `--out-dir <path>` explicitly, so a dev-environment
 verification session can never quietly become part of the durable learner record. There is
 nothing to back up in dev's `dev-events-data` volume — tearing it down loses nothing that matters.
+
+**Superseded:** `automate-event-log-backup` proposed this same backup goal around a `systemd
+--user` timer; it was never implemented and is replaced by `harden-event-store`.

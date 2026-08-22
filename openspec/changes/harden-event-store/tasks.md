@@ -143,45 +143,70 @@ presented as though the container approach were the only one ever considered.
       The dirty-clone refusal was also verified live (an unrelated stray file blocked the run,
       cleanly, with nothing committed) and the `/proc/1/fd` redirect confirmed to actually
       surface a triggered run's output in `docker logs`.
+      **Also confirmed against the final, permanently-running production container** (not just the throwaway test image used above): `docker compose up -d backup-cron` from the deploy clone brought up the real `shizi-backup-cron`; a manual trigger against it produced a real commit (`eeb1f91`) and push, visible via `docker logs shizi-backup-cron`.
 
 ## 5. Documentation
 
-- [ ] 5.1 Document the new `~/.local/share/shizi/` location and its relationship to
+- [x] 5.1 Document the new `~/.local/share/shizi/` location and its relationship to
       `~/.config/shizi/` in `infra/README.md`, replacing the now-inaccurate `docker volume
-      inspect` backup instructions with the fixed path.
-- [ ] 5.2 Document the completed volume-to-bind-mount migration (counts before/after, rollback
-      note that the original volume still exists).
-- [ ] 5.3 Document the cron job, its credential, and how to check backup health
-      (`git log -1 --format=%cr -- data/events/`) as a single copy-pasteable command.
-- [ ] 5.4 Note in `infra/README.md` that `automate-event-log-backup` is superseded by this change
+      inspect` backup instructions with the fixed path. New "Where production's data lives"
+      section added.
+- [x] 5.2 Document the completed volume-to-bind-mount migration (counts before/after, rollback
+      note that the original volume still exists). Folded into the same new section.
+- [x] 5.3 Document the cron job, its credential, and how to check backup health
+      (`git log -1 --format=%cr -- data/events/`) as a single copy-pasteable command. Rewrote
+      "Backing up the event store" in full for the container-based mechanism: what runs, why a
+      container rather than the host's crontab, the deploy-key/git-identity setup, and the
+      three-command health-check block. Also updated `data/README.md`, which had gone stale
+      ("Not yet populated") the moment the first real backup commit landed.
+- [x] 5.4 Note in `infra/README.md` that `automate-event-log-backup` is superseded by this change
       (for anyone who finds a stale reference to it in history).
 
 ## 6. Verification
 
 Each item maps to a scenario in `specs/deployment/spec.md`.
 
-- [ ] 6.1 `npm run lint && npm run typecheck && npm run test && npm run build` across the
-      workspace.
-- [ ] 6.2 **Fixed path, no runtime query needed:** confirm the live event store is readable at
+- [x] 6.1 `npm run lint && npm run typecheck && npm run test && npm run build` across the
+      workspace. All pass: lint clean, typecheck clean across all 8 packages, 384/384 tests
+      across 60 files, full build succeeds (17 precache entries, `check-precache` passes).
+- [x] 6.2 **Fixed path, no runtime query needed:** confirm the live event store is readable at
       `~/.local/share/shizi/sync-data/events.sqlite` directly, with no `docker volume inspect`
-      call anywhere in the process.
-- [ ] 6.3 **Store survives exactly as before:** stop, recreate, and rebuild the `sync` container;
-      confirm the event count is unchanged at each step.
-- [ ] 6.4 **Backup runs without a person:** trigger the cron entry directly (not by waiting a
-      full day) and confirm a real commit + push happens end to end.
-- [ ] 6.5 **Coexistence:** (revised for the container-based mechanism — see design.md) confirm
+      call anywhere in the process. Confirmed via task 1.6 and again via `pull-events.ts`'s new
+      default (task 2.1) — a bare `ls` and a bare script invocation both work with zero
+      container-runtime queries.
+- [x] 6.3 **Store survives exactly as before:** stop, recreate, and rebuild the `sync` container;
+      confirm the event count is unchanged at each step. Confirmed against the real live
+      deployment through all three: stop+start, `docker compose up -d sync` (recreate), and a
+      full image rebuild + recreate — event/rating counts read 0/0 identically at every step.
+- [x] 6.4 **Backup runs without a person:** trigger the cron entry directly (not by waiting a
+      full day) and confirm a real commit + push happens end to end. Done repeatedly against the
+      real production `shizi-backup-cron` container and the real `origin/main` — see section 4's
+      completion notes for the specific commits.
+- [x] 6.5 **Coexistence:** (revised for the container-based mechanism — see design.md) confirm
       the host's own crontab is completely untouched (no `shizi`-related entry at all, since
       nothing in this design writes to it); confirm `docker compose up -d backup-cron` run twice
-      results in exactly one `shizi-backup-cron` container, not two.
-- [ ] 6.6 **Commits only the canonical export:** introduce an unrelated uncommitted change in the
+      results in exactly one `shizi-backup-cron` container, not two. Confirmed both: `crontab -l
+      | grep -i shizi` finds nothing; running `docker compose up -d backup-cron` twice in a row
+      leaves exactly one `shizi-backup-cron` container.
+- [x] 6.6 **Commits only the canonical export:** introduce an unrelated uncommitted change in the
       deploy clone, run the backup wrapper, confirm it refuses and reports the conflict rather
-      than committing it; clean up afterward.
-- [ ] 6.7 **Health is self-observable:** confirm `git log -1 --format=%cr -- data/events/` alone
+      than committing it; clean up afterward. Confirmed against the real `shizi-backup-cron`
+      container and the real deploy clone: a stray untracked file blocked the run with a clear
+      "Refusing to run" message; nothing committed; file removed afterward.
+- [x] 6.7 **Health is self-observable:** confirm `git log -1 --format=%cr -- data/events/` alone
       answers "is this working," and confirm a no-new-data run is distinguishable from silence
-      (per 2.2's evidence mechanism).
-- [ ] 6.8 **Credential independence:** confirmed by construction (3.1's deploy key is never tied
+      (per 2.2's evidence mechanism). Confirmed: the real commit history on `main` now has both
+      a `data: sync event log` commit and multiple `chore: backup ran, no new events` commits,
+      each with its own timestamped `backup-log.txt` line — a stalled job (no new commits at
+      all) is unambiguously different from either.
+- [x] 6.8 **Credential independence:** confirmed by construction (3.1's deploy key is never tied
       to the `gh` login used elsewhere on this machine) — record that this is verified by design,
       not by a destructive logout test on a shared machine. Also confirmed directly: `git fetch`/
-      `git push` from the deploy clone succeed via the deploy key with no interactive prompt.
-- [ ] 6.9 **Event/rating/assignment counts unchanged throughout sections 1-6** — re-check against
-      the baseline recorded in task 1.2 at the end of implementation.
+      `git push` from the deploy clone succeed via the deploy key with no interactive prompt, and
+      every real commit in this section was pushed the same way.
+- [x] 6.9 **Event/rating/assignment counts unchanged throughout sections 1-6** — re-check against
+      the baseline recorded in task 1.2 at the end of implementation. Final check: 0/0/0,
+      unchanged from the task 1.2 baseline through every migration, rebuild, restart, and real
+      backup run performed while implementing this change. Production fully healthy: all four
+      containers (`shizi-gateway`, `shizi-sync`, `shizi-backup-cron`, `shizi-spikes`) running,
+      `/assessment/` and `/assessment/sync/health` both confirmed live.
