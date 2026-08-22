@@ -1,6 +1,6 @@
 ## 0. Prerequisite, outside this change's scope
 
-- [ ] 0.1 Commit and push the `add-dev-deployment` session's work (dev stack, templated nginx,
+- [x] 0.1 Commit and push the `add-dev-deployment` session's work (dev stack, templated nginx,
       canonical-record guard, the synced `deployment` main spec, and this change's own artifacts).
       All of it currently exists only in
       `.claude/worktrees/bridge-cse_01WEvjnbbXmpPwEVch6z8aJi/`, whose sibling worktree was already
@@ -95,24 +95,32 @@
 - [x] 3.1 Serve `config.json` from a host-mounted location rather than from inside the image, so
       regenerating it needs no release. Mount it narrowly — a directory containing only that file,
       not the whole served root, so it cannot shadow application assets. Implemented as a direct
-      file-to-file bind mount (`./apps/assessment/public/config.json` →
-      `/usr/share/nginx/html/config.json:ro`) rather than a directory mount — equally narrow for
-      this one file, and avoids adding a second, differently-shaped host path convention.
-      Added `.dockerignore`/`.gitignore` entries so this stays genuinely never-baked/never-committed
-      (see 3.2's note on why that mattered) and `touch`ed a placeholder empty file in this checkout
-      so the mount source exists (a missing host file makes Docker create an empty DIRECTORY there
-      instead — see 3.4's live-tested proof that this degrades safely anyway, but a real file avoids
-      the confusing state altogether).
+      file-to-file bind mount, equally narrow for this one file, and avoiding a second,
+      differently-shaped host path convention.
+      **Superseded during task 6.4's own verification, not left as originally shipped:** the
+      first location chosen was `./apps/assessment/public/config.json` inside the deploy clone —
+      which turned out to violate this very change's central guarantee. Deleting the deploy
+      clone (task 6.4's exact scenario) left the mount source gone, and the gateway container
+      failed to even **start** on the next restart — a real, brief production outage, caught by
+      actually running the destructive test, not by reasoning about it on paper. Moved to
+      `~/.config/shizi/config.json` — outside every git working tree, the same treatment already
+      given the shared token — and re-verified (see 6.4's updated notes). Full account in
+      design.md's "Immutable app, mutable config" entry.
+      Added `.dockerignore`/`.gitignore` entries for the (now superseded, but still harmless to
+      leave gitignored for local/dev use) in-repo path, and `touch`ed a placeholder file at the
+      real durable location so the mount source exists (a missing host file makes Docker create
+      an empty DIRECTORY there instead — see 3.4's live-tested proof that this degrades safely
+      anyway, but a real file avoids the confusing state altogether).
 - [x] 3.2 Point `publish-config.ts` at that location (or document the copy step), and confirm the
       served URL is unchanged from the client's perspective — `published-config.ts` fetches
-      `${BASE_URL}config.json` and must keep working untouched. No script change needed:
-      `publish-config.ts` already resolves its output as `<repoRoot>/apps/assessment/public/config.json`
-      (relative to where the script file itself lives), which is exactly the deploy clone's copy of
-      that path once `harden-prod-deployment`'s deploy clone exists — the same "resolve relative to
-      the script, not a hardcoded path" pattern `pull-events.ts` already uses. Served URL
-      (`/assessment/config.json`) is unchanged; nginx's existing `alias`-based `/assessment/`
-      location block resolves it through the bind mount exactly as it resolved it from the old
-      bind-mounted `dist/` before.
+      `${BASE_URL}config.json` and must keep working untouched.
+      **Revised along with 3.1's correction:** a script change WAS needed after all — added an
+      `--out <path>` option so production can target `~/.config/shizi/config.json` explicitly,
+      while the default (repo-relative) behavior stays exactly as it was for local/dev use.
+      Verified both branches directly: `--out /tmp/...` writes there; no `--out` still writes the
+      original repo-relative path. Served URL (`/assessment/config.json`) unchanged either way —
+      nginx's `alias`-based `/assessment/` location block resolves it through whichever file is
+      bind-mounted at that container path, unaffected by this change.
       **Found while doing this:** the config.json path was not previously gitignored despite now
       being pure runtime-generated output — added to `.gitignore` so the deploy clone's `git
       status` stays clean and it can never get accidentally `git add -A`'d.
@@ -162,20 +170,39 @@
 
 ## 5. Deploy clone and release procedure
 
-- [ ] 5.1 Create `~/deploy/shizi` as a plain clone of `main`. Never develop in it; it exists only
+- [x] 5.1 Create `~/deploy/shizi` as a plain clone of `main`. Never develop in it; it exists only
       to run releases. Under `$HOME`, not `/srv` — Docker here is rootless (design.md).
-- [ ] 5.2 Cut production over: release from the deploy clone, confirm `shizi-gateway` is running
+      Sequenced after this change's own code actually reached `main` (PR #11, merged) — asked the
+      user explicitly rather than assuming, since deploying from a clone that DIDN'T yet have
+      this change's own code would have reintroduced exactly the coupling-to-an-ephemeral-branch
+      problem this change exists to remove. `git clone` (not a worktree) into `/home/ubuntu/deploy/shizi`,
+      confirmed on `main` at the merge commit.
+- [x] 5.2 Cut production over: release from the deploy clone, confirm `shizi-gateway` is running
       the image (no bind-mounts for app content), and confirm the site serves. Also recreate
       `shizi-sync` from the deploy clone at the same time, so it picks up task 1.1's
       `.dockerignore` fix (the currently running sync image still has `.env` baked into its layer
       from before that fix existed) — no reason to leave that in place once a cutover is
       happening anyway.
-- [ ] 5.3 Document the release sequence in `infra/README.md` as one copy-pasteable block
+      Real cutover performed, against the real live production stack, event count recorded
+      before (0) and confirmed unchanged after. `source`d `~/.config/shizi/prod.env`,
+      `docker compose build gateway sync`, tagged `shizi-gateway:2026-08-22`, `docker compose up
+      -d gateway sync`. Verified: `shizi-gateway` now runs `shizi-gateway:latest` with its ONLY
+      mount being the deliberate `config.json` bind (no app content, no template — both are baked
+      in); `shizi-sync` runs the fixed image (confirmed `.env` no longer present inside it);
+      `https://shizi.realxco.com/assessment/` serves 200 with the correct manifest/cache-header/
+      sync-health through the real public hostname; an authenticated event POST using the
+      durable-location token round-trips (`{"inserted":0}` — an intentionally empty test body,
+      not a real event); compose project label still reads `shizi`. **This is now the actual
+      live production deployment**, not a side experiment.
+- [x] 5.3 Document the release sequence in `infra/README.md` as one copy-pasteable block
       (`git pull` → build → `up -d`), plus the rollback command using a previous date tag. If this
-      isn't a single block, it will be got wrong.
-- [ ] 5.4 Update `infra/README.md`'s existing "Do not `rm -rf apps/assessment/dist`" warning: that
+      isn't a single block, it will be got wrong. Added as "Releasing a new version"; the exact
+      block documented is the one actually used for 5.2's real cutover, not a theoretical one —
+      each line was run for real and worked as written.
+- [x] 5.4 Update `infra/README.md`'s existing "Do not `rm -rf apps/assessment/dist`" warning: that
       hazard no longer applies to production once it serves an image, but it still applies to the
-      dev stack, which keeps its bind-mount.
+      dev stack, which keeps its bind-mount. Folded into the "Releasing a new version" section:
+      states the hazard is now dev-specific and explains why (image vs. bind-mount).
 
 ## 6. Verification
 
@@ -191,10 +218,12 @@ Each item maps to a scenario in `specs/deployment/spec.md`.
       grepping the real built image directly. No design violation: dev's `dist/` is rebuilt fresh
       each verification pass anyway and never claimed the "update without rebuild" property this
       change gives production specifically.
-- [ ] 6.2 **Rendered-config parity is preserved:** dump `/etc/nginx/conf.d/default.conf` from the
+- [x] 6.2 **Rendered-config parity is preserved:** dump `/etc/nginx/conf.d/default.conf` from the
       image-based prod gateway and from a running dev gateway; the only difference must still be
       the sync upstream. This is the check that proves baking the template changed nothing
-      observable.
+      observable. Confirmed against the real live (now image-based) `shizi-gateway` and a
+      throwaway dev-flavored container rendering the same template file: one-line diff, exactly
+      `sync` vs `sync-dev`.
 - [ ] 6.3 **The `rm -rf dist` class is dead:** delete `apps/assessment/dist` in the deploy clone,
       then restart `shizi-gateway`, and confirm production still serves. Under the old bind-mount
       this produced a real four-minute outage.

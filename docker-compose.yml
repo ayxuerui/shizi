@@ -82,15 +82,28 @@ services:
       # its own cadence independent of the app — mounting only this ONE
       # file (not the whole served root, and not baked into the image)
       # lets it update with no rebuild and no release. A missing or
-      # malformed file here is already a handled case, not a special one:
+      # malformed file here is a handled case at the APPLICATION level:
       # apps/assessment/src/session/published-config.ts's
       # loadPublishedConfig() falls back to its bundled pool on ANY
-      # fetch/parse failure. The host file must exist (even empty) before
-      # the FIRST `docker compose up` here — Docker creates an empty
-      # DIRECTORY at this path instead of a file if it doesn't already
-      # exist, which is not what either side expects — see
-      # infra/README.md's setup steps.
-      - ./apps/assessment/public/config.json:/usr/share/nginx/html/config.json:ro
+      # fetch/parse failure.
+      #
+      # The mount source MUST live outside the deploy clone
+      # (~/.config/shizi/config.json — same durable-location treatment
+      # as the shared token, see infra/README.md), NOT a path inside
+      # any git checkout. Found the hard way: a bind mount whose SOURCE
+      # directory disappears entirely (the whole point of this change —
+      # the deploy clone is disposable for uptime) makes the CONTAINER
+      # ITSELF fail to even start on the next restart/recreate — that's
+      # a much harder failure than a missing file the app can gracefully
+      # degrade from, and it defeated this change's own "no checkout,
+      # still serving" guarantee the first time it was actually tested.
+      # The host file must exist (even empty) before the FIRST
+      # `docker compose up` here — Docker creates an empty DIRECTORY at
+      # this path instead of a file if it doesn't already exist, which
+      # is not what either side expects — see infra/README.md's setup
+      # steps. Publish with `publish-config.ts --out
+      # ~/.config/shizi/config.json`, not its repo-relative default.
+      - /home/ubuntu/.config/shizi/config.json:/usr/share/nginx/html/config.json:ro
     environment:
       # Prod's gateway reaches prod's sync service and nothing else. Both
       # stacks sit on cloudflared-net, and docker aliases every container

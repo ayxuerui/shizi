@@ -3,7 +3,7 @@
 // known-set + a ranked next-targets list (curriculum's Loop 1 — a SLOW
 // loop per design.md's fast/slow-loop table, deliberately NOT recomputed
 // client-side), and bundles the probe pool + difficulty params, into
-// apps/assessment/public/config.json.
+// apps/assessment/public/config.json by default.
 //
 // apps/assessment itself only consumes probePool + difficultyParams
 // (see src/session/published-config.ts) — knownSet/nextTargets are
@@ -12,7 +12,18 @@
 // not silently dropped — same discipline as curriculum's own
 // word-unlock/story-unlock stubs.
 //
-// Usage: npx tsx scripts/publish-config.ts
+// harden-prod-deployment: --out overrides the default repo-relative
+// path. Production MUST use this to publish to a location outside the
+// deploy clone (~/.config/shizi/config.json, docker-compose.yml's
+// gateway bind-mounts THAT, not a path inside any checkout) — found the
+// hard way, by actually deleting the deploy clone and confirming the
+// gateway container failed to even START on next restart when its
+// config.json bind-mount source lived inside that clone. A bind mount
+// whose source is gone isn't a "missing file" the app's own graceful
+// fallback (published-config.ts's try/catch) can do anything about —
+// the container never starts serving ANYTHING. See design.md.
+//
+// Usage: npx tsx scripts/publish-config.ts [--out <path>]
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -79,7 +90,9 @@ const config = {
   },
 };
 
-const outPath = join(repoRoot, "apps", "assessment", "public", "config.json");
+const outArgIndex = process.argv.indexOf("--out");
+const outArg = outArgIndex !== -1 ? process.argv[outArgIndex + 1] : undefined;
+const outPath = outArg ?? join(repoRoot, "apps", "assessment", "public", "config.json");
 mkdirSync(dirname(outPath), { recursive: true });
 writeFileSync(outPath, `${JSON.stringify(config, null, 2)}\n`);
 
