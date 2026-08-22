@@ -96,6 +96,16 @@ services:
       EVENTS_DB_PATH: /repo/infra/sync-service/data/events.sqlite
       BACKUP_DIR: /repo/infra/sync-service/data/backups
       SHIZI_ENV: dev
+    # harden-event-store: deliberately STILL a Docker-managed named
+    # volume, unlike prod's sync (which moved to a fixed host bind mount
+    # at ~/.local/share/shizi/sync-data/ — see docker-compose.yml). Dev
+    # is meant to be trivially disposable (`docker compose down -v`
+    # cleanly removes this), and its data is already documented
+    # elsewhere as disposable by design — a fixed host path would only
+    # add manual cleanup burden for data nobody needs to keep. This
+    # asymmetry is intended, not an oversight (specs/deployment/spec.md's
+    # "Non-production's event store is exempt from the fixed-location
+    # requirement").
     volumes:
       - dev-events-data:/repo/infra/sync-service/data
     restart: unless-stopped
