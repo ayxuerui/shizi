@@ -1,0 +1,11 @@
+# harden-event-store: the daily backup schedule, version-controlled and
+# baked into the shizi-backup-cron image (see ../backup-cron.Dockerfile) —
+# checkable with `docker exec shizi-backup-cron cat /etc/cron.d/shizi-backup`,
+# configurable by editing this file and rebuilding, same as any other
+# release in this project. Output is redirected to the container's own
+# PID 1 stdout/stderr so `docker logs shizi-backup-cron` shows every run,
+# not just cron's own (otherwise silent) internal logging.
+#
+# A trailing blank line is required below — Debian cron ignores a final
+# line with no newline after it.
+0 3 * * * root cd /repo && npx tsx infra/sync-service/scripts/backup-and-push.ts >>/proc/1/fd/1 2>>/proc/1/fd/2

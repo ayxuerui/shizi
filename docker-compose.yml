@@ -172,6 +172,31 @@ services:
     networks:
       - cloudflared-net
 
+  # harden-event-store: the daily backup schedule, as a container
+  # instead of an entry in the host's own crontab — see
+  # infra/backup-cron.Dockerfile for why, and
+  # infra/sync-service/scripts/backup-and-push.ts for what actually
+  # runs. Bind-mounts the SAME real state the human release workflow
+  # already uses: the deploy clone itself (read-write — this is what
+  # actually gets committed to and pushed, no second internal clone),
+  # the deploy key (at the exact absolute path the clone's own git
+  # config already expects via `core.sshCommand`, so nothing needed to
+  # change there), and the event store (read-only — backup only reads
+  # it). Deliberately NOT on `cloudflared-net` — it has no reason to
+  # talk to `gateway`/`sync`, only needs outbound internet for the git
+  # push, which the default per-project bridge network already
+  # provides.
+  backup-cron:
+    build:
+      context: .
+      dockerfile: infra/backup-cron.Dockerfile
+    container_name: shizi-backup-cron
+    volumes:
+      - /home/ubuntu/deploy/shizi:/repo
+      - /home/ubuntu/.config/shizi/deploy-key:/home/ubuntu/.config/shizi/deploy-key:ro
+      - /home/ubuntu/.local/share/shizi/sync-data:/home/ubuntu/.local/share/shizi/sync-data:ro
+    restart: unless-stopped
+
 networks:
   cloudflared-net:
     name: cloudflared-net

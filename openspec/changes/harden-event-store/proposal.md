@@ -26,11 +26,12 @@ path.
 
 This supersedes `automate-event-log-backup` (proposed earlier, never implemented, 0 tasks
 started), which designed the same backup goal around a `systemd --user` timer. Per the user's
-explicit direction, this change uses a cron job instead — and this host already runs a
-version-controlled crontab for an unrelated project (`pkm-maintenance`), with an established,
-proven idiom (`flock`-guarded entries, tagged with an identifying comment, installed
-idempotently without disturbing other jobs' lines, secrets sourced from a `.env` rather than
-inlined). This change's own cron entry follows that same idiom rather than inventing a new one.
+explicit direction, this change uses a cron job instead — and, per a second direction given
+mid-implementation (after a host-crontab version, matching this host's existing
+`pkm-maintenance` idiom, was already built and verified), that cron job runs inside its own
+container rather than in the host's own system crontab — consistent with the rest of this
+project's infrastructure (`gateway`, `sync`) already being fully containerized, and inspectable
+with ordinary Docker tooling instead of host SSH access.
 
 No real learner data exists yet (confirmed directly: 0 events, 0 ratings, 0 assignments in the
 live store at time of writing), which makes this the cheapest possible moment to relocate the
@@ -47,11 +48,13 @@ compose project name before Section 10's first real session.
   database and its own periodic snapshots). The existing named volume is left in place,
   untouched, as the rollback path — the same discipline `add-dev-deployment`'s volume rename
   and `harden-prod-deployment`'s config-mount fix both already followed.
-- **A daily cron job** runs the event export (`pull-events.ts`, now pointed at the fixed host
-  path directly — no more `docker volume inspect` step) and, only if the export actually
-  changed, commits `data/events/*.jsonl` and pushes to `origin/main`. Installed as a
-  `flock`-guarded, tagged entry alongside this host's existing `pkm-maintenance` crontab,
-  installed idempotently so it never disturbs those unrelated jobs.
+- **A daily backup runs inside its own `backup-cron` container** (a cron daemon, not a host
+  crontab entry), running the event export (`pull-events.ts`, now pointed at the fixed host path
+  directly — no more `docker volume inspect` step) and, only if the export actually changed,
+  committing `data/events/*.jsonl` and pushing to `origin/main`. Bind-mounts the SAME deploy
+  clone the human release workflow already uses — no second internal git clone, no credentials
+  baked into the image. Schedule and logs are inspectable with `docker exec`/`docker logs`
+  rather than host SSH access.
 - **A durable, narrowly-scoped push credential** for the cron job, independent of any
   interactive `gh auth` login — the same reasoning `harden-prod-deployment` already applied to
   the sync shared token: an unattended job spanning years shouldn't be tied to someone's
@@ -95,12 +98,12 @@ beyond the self-observable git-log property; confirming the iOS storage-eviction
   `infra/sync-service/scripts/pull-events.ts` (default `EVENTS_DB_PATH` resolution simplifies
   once the path is fixed — no behavior change, just removes the need for the `docker volume
   inspect` step in normal operation).
-- **New**: a small backup script (or a thin wrapper around `pull-events.ts`) handling the
-  git add/commit/push steps; a crontab entry.
+- **New**: a small backup script (`backup-and-push.ts`) handling the export/commit/push
+  sequence; a `backup-cron` Dockerfile and compose service.
 - **Operational, one-time**: migrate the live `events-data` volume's contents to the new host
   path (near-zero risk today — confirmed 0 events/ratings/assignments — but done with the same
   stop-copy-verify-swap discipline as every prior migration this project has done, since this
-  won't stay true after real sessions start); create the durable push credential; install the
-  cron entry without disturbing the host's existing `pkm-maintenance` crontab.
+  won't stay true after real sessions start); create the durable push credential (a deploy key);
+  set a git identity in the deploy clone's local config so the container can commit.
 - **No impact on the running application's behavior** — entirely about where data lives on the
   host and how it gets backed up.

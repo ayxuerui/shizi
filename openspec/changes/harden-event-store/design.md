@@ -83,31 +83,54 @@ reasoning `add-dev-deployment` used to justify pinning the compose project name 
 session data existed. Waiting would only make a materially identical migration riskier for no
 benefit.
 
-### Cron, not `systemd --user`, following this host's own existing idiom
+### A cron daemon inside a container, not a host crontab entry
 
-**Decision:** a plain crontab entry, not the `systemd --user` timer `automate-event-log-backup`
-originally proposed — a direct instruction from the user, and it also happens to fit this host
-better than the superseded design did. This host already runs `pkm-maintenance`'s
-version-controlled crontab; a new `flock`-guarded, tagged entry in the same style is one more
-line in an idiom that already exists here, rather than a second, parallel scheduling mechanism
-(`systemd --user` units) that would need its own `enable-linger` step and its own conventions.
-`enable-linger` was flagged in the superseded design as "easy to forget, fails silently" — cron
-avoids that specific failure mode entirely, since the system cron daemon isn't tied to a login
-session the way a `--user` unit is.
+**Decision, revised mid-implementation at the user's explicit direction:** the daily schedule
+runs inside a dedicated `backup-cron` container (`infra/backup-cron.Dockerfile`), not as an
+entry in the host's own system crontab. The original plan — a `flock`-guarded, tagged line
+alongside this host's existing `pkm-maintenance` crontab — was fully implemented and verified
+(installer script, idempotent re-install, a real diff proving `pkm-maintenance`'s lines were
+untouched) before being reverted in favor of this. The reasoning that changed it: this project's
+other infrastructure (`gateway`, `sync`) is already entirely containerized, and a host crontab
+entry is the one piece of it an operator would need host SSH access and `crontab -l` to inspect
+or change, rather than ordinary Docker tooling (`docker exec shizi-backup-cron cat
+/etc/cron.d/shizi-backup`, `docker logs shizi-backup-cron`) consistent with everything else.
 
-**What carries over unchanged from the superseded design:** the narrow-commit-scope guard
-(refuse to run if the clone has unrelated uncommitted changes), the "prove it ran even when
-there was nothing new" evidence requirement, and the durable, narrowly-scoped push credential —
-none of that is scheduling-mechanism-specific, so none of it needed rethinking.
+**What carries over unchanged from the superseded (host-crontab, and before that, `systemd
+--user`) designs:** the narrow-commit-scope guard, the "prove it ran even when there was
+nothing new" evidence requirement, and the durable, narrowly-scoped push credential — none of
+that is scheduling-mechanism-specific, so none of it needed rethinking across either pivot.
 
-### Installation must never touch `pkm-maintenance`'s lines
+### The container reuses the real deploy clone; it does not maintain a second one
 
-**Decision:** install this job by reading the current crontab, filtering out only lines tagged
-with this job's own identifying comment (idempotent re-install), and writing the result back —
-never `crontab <full-file>` from a template that doesn't already contain every other job's
-lines verbatim. The existing `pkm-maintenance` install script already demonstrates the safe
-pattern (`crontab -l | grep -v '# <tag>'; <new lines> | crontab -`); this change's installer
-follows the identical shape rather than a bespoke one.
+**Decision, confirmed directly with the user:** `backup-cron` bind-mounts the SAME
+`~/deploy/shizi` the human release workflow already operates on (read-write — this is what
+actually gets committed to and pushed), rather than cloning the repository a second time inside
+the container. Also bind-mounted at the exact same absolute host paths the clone's own git
+config and `pull-events.ts`'s fixed default already expect: the deploy key (so
+`core.sshCommand` resolves with zero changes to that config) and the event store from section 1
+(read-only — backup only reads it). No credentials or a second git history are baked into the
+image.
+
+The consequence accepted deliberately: `node_modules` isn't part of that clone by default (it's
+never been needed there before this container), so the entrypoint runs `npm ci` into the
+bind-mounted clone at container start if missing — a real, one-time cost on first boot (native
+`better-sqlite3` compile, confirmed to take under a minute), not on every cron tick. The
+alternative — baking `node_modules` into the image at build time — was rejected because it would
+let the running script silently drift from whatever commit the clone is actually on; installing
+into the bind mount at start keeps the code that runs always exactly matching that commit.
+
+**Output visibility:** cron's own job output isn't forwarded to `docker logs` by default — it's
+mailed (nowhere, here) or silently dropped. The crontab entry redirects explicitly to
+`/proc/1/fd/1`/`/proc/1/fd/2` (the container's own PID 1, `cron -f`), a well-known pattern for
+getting cron output into a container's log stream. Verified directly: a manually-triggered run
+using that exact redirect showed up in `docker logs` immediately.
+
+**Found and fixed while verifying this, not assumed:** the container has no git identity
+configured (no `user.name`/`user.email`), which the FIRST live-triggered commit attempt caught
+immediately (`git commit` refused with "Author identity unknown"). Fixed by setting it in the
+deploy clone's own LOCAL git config on the host — persists via the bind-mounted `.git` directory,
+no container-side setup needed, same treatment `core.sshCommand` already got.
 
 ### Deliberately not built
 
@@ -128,13 +151,20 @@ follows the identical shape rather than a bespoke one.
   sequence and the untouched-original-as-rollback discipline; further de-risked by confirming
   the store is currently empty.
 - **A cron job with no interactive session context can fail silently if misconfigured** → the
-  self-observable git-log property is the primary mitigation; the job must also source its own
-  `.env` explicitly (cron's environment is otherwise near-empty — confirmed directly from this
-  host's existing `pkm-maintenance` crontab comments making the same point), and must be tagged
-  so its presence (and any output redirected to a log) is easy to find later.
+  self-observable git-log property is the primary mitigation. Fully isolated inside its own
+  container now, so this risk no longer extends to the host's own scheduler at all.
 - **Two durable-location directories (`~/.config/shizi/`, `~/.local/share/shizi/`) instead of
   one** → accepted; see "A second durable-location convention" above. Documented clearly in
   `infra/README.md` so it reads as a deliberate split, not drift.
-- **Installing a crontab entry risks the host's other scheduled jobs if done carelessly** →
-  mitigated by reusing the exact idempotent, tag-filtered install pattern this host's own
-  `pkm-maintenance` setup already uses successfully, rather than inventing a new one.
+- **A host crontab entry was implemented, verified, and then reverted within this same change**
+  → not wasted effort worth hiding: the reversion happened cleanly (the installer script proved
+  a byte-for-byte diff of only the added line before being deleted; the crontab was restored
+  from a captured backup and re-verified identical), and the decision to containerize instead
+  came from the user directly, after the host-crontab approach was already working. Recorded
+  here, and in tasks.md's section 4 notes, rather than presented as though the container
+  approach were the only one ever considered.
+- **Verifying this created real commits on the actual production `main` branch** → accepted,
+  deliberately: proving the backup mechanism works AT ALL requires a real push to the real
+  remote — there's no meaningful way to fake that check. Both real triggered runs (one with new
+  data, one without) are exactly the commits this mechanism is supposed to produce in normal
+  operation, not test pollution to clean up afterward.
