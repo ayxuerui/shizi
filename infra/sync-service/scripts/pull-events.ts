@@ -19,8 +19,19 @@
 // any ad hoc/local run against a store that isn't dev's) behaves exactly
 // as before this change.
 //
+// harden-event-store: the default db path below now points at the
+// fixed host location (~/.local/share/shizi/sync-data/events.sqlite,
+// see docker-compose.yml's `sync` bind mount) rather than a repo-
+// relative path that never corresponded to anything real on the host
+// (it only ever meant something INSIDE the container, via the old
+// events-data named volume). A script running on the host — this one,
+// run directly or from cron — can now read the live store with no
+// `docker volume inspect` step, matching every other durable-location
+// path in this project (~/.config/shizi/, absolute, not ${HOME}-
+// expanded, for the same consistency reason).
+//
 // Usage: npx tsx scripts/pull-events.ts [path-to-db] [--out-dir <dir>]
-//   (db path defaults to $EVENTS_DB_PATH, then ./data/events.sqlite)
+//   (db path defaults to $EVENTS_DB_PATH, then the fixed host path)
 
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -31,6 +42,11 @@ import { openEventStore } from "../src/db.js";
 const here = dirname(fileURLToPath(import.meta.url));
 const packageRoot = join(here, "..");
 const repoRoot = join(packageRoot, "..", "..");
+
+// harden-event-store: fixed, known in advance — see this file's header
+// comment. Matches docker-compose.yml's `sync` bind-mount source
+// exactly; keep the two in sync if either ever moves.
+const DEFAULT_HOST_DB_PATH = "/home/ubuntu/.local/share/shizi/sync-data/events.sqlite";
 
 /**
  * Thrown when SHIZI_ENV=dev and no explicit --out-dir was given. Named
@@ -131,7 +147,7 @@ function parseArgs(argv: string[]): { dbPathArg: string | undefined; outDirArg: 
 // not when imported by pull-events.test.ts.
 if (import.meta.url === `file://${process.argv[1]}`) {
   const { dbPathArg, outDirArg } = parseArgs(process.argv.slice(2));
-  const dbPath = dbPathArg ?? process.env.EVENTS_DB_PATH ?? join(packageRoot, "data", "events.sqlite");
+  const dbPath = dbPathArg ?? process.env.EVENTS_DB_PATH ?? DEFAULT_HOST_DB_PATH;
 
   if (!existsSync(dbPath)) {
     console.error(`No event store found at ${dbPath} — nothing to pull yet.`);

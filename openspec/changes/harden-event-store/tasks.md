@@ -18,8 +18,12 @@
       Leave `EVENTS_DB_PATH`/`BACKUP_DIR` (the in-container paths) unchanged. `docker compose
       config --quiet` confirmed clean; the now-unused top-level `events-data:` volume
       declaration removed along with it.
-- [ ] 1.6 Bring `sync` back up from the deploy clone; confirm the counts from 1.2 are unchanged,
-      and confirm an authenticated event POST still round-trips end to end.
+- [x] 1.6 Bring `sync` back up from the deploy clone; confirm the counts from 1.2 are unchanged,
+      and confirm an authenticated event POST still round-trips end to end. Confirmed against
+      the real live production deployment: mount is now `/home/ubuntu/.local/share/shizi/
+      sync-data -> /repo/infra/sync-service/data`; counts still 0/0/0; `/assessment/sync/health`
+      → ok; an authenticated event POST round-tripped `{"inserted":0}`; the SQLite file is now
+      directly `ls`-able at the fixed host path with no `docker volume inspect` step.
 - [x] 1.7 Leave the original `events-data` volume in place, untouched, as the rollback path — do
       not delete it as part of this change.
 - [x] 1.8 Update `docker-compose.dev.yml`'s comment on `dev-events-data` to state explicitly that
@@ -29,19 +33,42 @@
 
 ## 2. Backup script
 
-- [ ] 2.1 Simplify `infra/sync-service/scripts/pull-events.ts`'s default `EVENTS_DB_PATH`
+- [x] 2.1 Simplify `infra/sync-service/scripts/pull-events.ts`'s default `EVENTS_DB_PATH`
       resolution now that the host path is fixed — document the new default in the script's own
       header comment; keep the existing `--out-dir`/`SHIZI_ENV=dev` guard from `add-dev-
-      deployment` untouched.
-- [ ] 2.2 Add a small wrapper script (e.g. `scripts/backup-and-push.sh`, run from the deploy
+      deployment` untouched. Default now `/home/ubuntu/.local/share/shizi/sync-data/
+      events.sqlite`. Verified: ran with no arguments and no `EVENTS_DB_PATH`, confirmed it read
+      the real live store directly; `data/events/` in this checkout confirmed untouched
+      (used `--out-dir` for the smoke test). `pull-events.test.ts`'s 7 tests unaffected (they
+      always pass an explicit dbPath).
+- [x] 2.2 Add a small wrapper script (e.g. `scripts/backup-and-push.sh`, run from the deploy
       clone) that: runs the export against the fixed path from 1.1 (no `docker volume inspect`
       step needed anymore); checks the clone for uncommitted changes outside `data/events/` and
       refuses to proceed if any exist (spec's "commits only the canonical export"); commits only
       if the export actually changed something, otherwise leaves evidence it ran (spec's
       "distinguishable from silence" — e.g. an append to a small run-log file) rather than doing
       nothing silently; pushes.
-- [ ] 2.3 Unit-test the wrapper's dirty-clone refusal and its "commits only the export files"
+      **Written as TypeScript (`backup-and-push.ts`), not bash as originally sketched** — matches
+      this package's own "extract the decision logic, keep the entrypoint thin" convention
+      (`pull-events.ts`), makes task 2.3's unit tests natural instead of awkward, and reuses
+      `pullEvents` directly rather than shelling out to `npx tsx pull-events.ts` from inside a
+      shell script. `runBackup()` deliberately never pushes itself — the CLI entrypoint does that
+      as its own last step — so tests exercise the full export/log/commit sequence against a real
+      scratch git repo with no real remote needed. Evidence-of-run lives in
+      `data/events/backup-log.txt`, appended every run (not just when data changed) — chosen over
+      an empty commit specifically because `git log -- data/events/` is a PATH-scoped log, and an
+      empty commit touching no files under that path would be invisible to exactly the health
+      check task 6.7/design.md's self-observable-health decision relies on.
+- [x] 2.3 Unit-test the wrapper's dirty-clone refusal and its "commits only the export files"
       behavior against a scratch git repo, matching `pull-events.test.ts`'s existing approach.
+      `backup-and-push.test.ts`, 6 tests against a real scratch git repo (`git init` in a temp
+      dir, not mocked — same philosophy `db.test.ts`/`pull-events.test.ts` already use for real
+      SQLite): the guard passes clean, throws on unrelated dirt, doesn't throw for committed
+      changes; `runBackup` refuses and commits nothing when dirty, commits real data with the
+      correct message/log line, and — the scenario that actually matters — a SECOND run against
+      unchanged data still produces a new commit (proving "ran, found nothing" is distinguishable
+      from a stalled job) while `events.jsonl` stays byte-identical. All 48 sync-service tests
+      pass; lint and typecheck clean.
 
 ## 3. Durable push credential
 
