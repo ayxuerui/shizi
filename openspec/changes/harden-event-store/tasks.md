@@ -72,27 +72,77 @@
 
 ## 3. Durable push credential
 
-- [ ] 3.1 Create a fine-grained GitHub PAT (or deploy key) scoped to `contents:write` on this
+- [x] 3.1 Create a fine-grained GitHub PAT (or deploy key) scoped to `contents:write` on this
       repository only — not the interactive `gh auth` login already used elsewhere on this
       machine.
-- [ ] 3.2 Store it in `~/.config/shizi/` alongside the existing durable secrets — one place
+      **Used the deploy-key alternative, not a PAT** — creating a fine-grained PAT has no API;
+      it's a GitHub web-UI-only flow requiring the user's own browser session, which this
+      workflow cannot drive. A deploy key IS creatable programmatically (`gh api
+      repos/.../keys`) and is arguably the better fit anyway: it's inherently scoped to this one
+      repository, not account-wide. Generated an ed25519 keypair
+      (`~/.config/shizi/deploy-key{,.pub}`, no passphrase — appropriate for unattended cron use)
+      and registered the public half with `read_only: false` (write access) via the GitHub API,
+      using the already-authenticated `gh` CLI's admin access to this repo.
+- [x] 3.2 Store it in `~/.config/shizi/` alongside the existing durable secrets — one place
       operators already know to check. Record a copy in a password manager.
-- [ ] 3.3 Configure the deploy clone's git remote (or the wrapper script directly) to push using
-      this credential, independent of any `gh`-managed helper.
+      Private key at `~/.config/shizi/deploy-key` (0600), public half at `.pub` (0644, not
+      sensitive — it's already registered with GitHub). **Recording it in a password manager is
+      the user's own action** — same as `harden-prod-deployment`'s task 0.2 for the sync token; I
+      have no password-manager access. Unlike that token, this key is not embedded in anything
+      served publicly, so losing the only copy would mean generating and re-registering a new
+      one (a few-minute fix), not a security exposure — lower urgency than the sync token, but
+      still worth a durable off-machine copy.
+- [x] 3.3 Configure the deploy clone's git remote (or the wrapper script directly) to push using
+      this credential, independent of any `gh`-managed helper. `origin` switched to the SSH URL
+      (`git@github.com:ayxuerui/shizi.git`); `core.sshCommand` set LOCALLY in the deploy clone
+      (not globally) to `ssh -i ~/.config/shizi/deploy-key -o IdentitiesOnly=yes`, scoping this
+      identity to that one clone. Verified: `git fetch` succeeded with no interactive prompt and
+      no dependency on the `gh` credential helper; push verification folds into task 4.3's real
+      triggered run.
 
 ## 4. Cron installation
 
-- [ ] 4.1 Write the crontab entry following this host's existing `pkm-maintenance` idiom exactly:
-      `flock -n /tmp/shizi-backup.lock -c '...'`, tagged with a trailing `# shizi-backup` comment,
-      daily cadence, sourcing a `.env` for the credential from 3.2/3.3 and an explicit `PATH`
-      (cron's own environment is otherwise near-empty).
-- [ ] 4.2 Install it idempotently: read the current crontab, filter out only lines already tagged
-      `# shizi-backup` (so a re-install replaces rather than duplicates), append the new entry,
-      write back. Verify every pre-existing `pkm-maintenance` line is still present afterward,
-      byte for byte.
-- [ ] 4.3 Verify a real run: trigger the job manually (not by waiting for the schedule), confirm a
+**Revised mid-implementation, at the user's explicit direction:** tasks 4.1/4.2 originally called
+for a host crontab entry following this host's `pkm-maintenance` idiom. That version was fully
+built and verified (a real `flock`-guarded, tagged entry installed idempotently, a byte-for-byte
+diff proving every `pkm-maintenance` line was untouched) — then reverted in favor of a
+dockerized cron daemon instead, for the same "inspectable with ordinary Docker tooling" reasoning
+already applied to every other piece of this project's infrastructure. See design.md's "A cron
+daemon inside a container, not a host crontab entry" for the full account, including why it isn't
+presented as though the container approach were the only one ever considered.
+
+- [x] 4.1 (Superseded task text: "write the crontab entry...") Instead: `infra/backup-cron.Dockerfile`
+      (`node:22-bookworm-slim` + `git`/`openssh-client`/`cron`/the native-build toolchain
+      `better-sqlite3` needs, matching `infra/sync-service/Dockerfile`'s own requirement;
+      `ssh-keyscan github.com` baked in at build time) and `infra/backup-cron/crontab` — the
+      version-controlled, `/etc/cron.d/`-installed schedule, redirecting output to
+      `/proc/1/fd/{1,2}` so `docker logs` shows every run. `infra/backup-cron/entrypoint.sh` runs
+      `npm ci` into the bind-mounted deploy clone on first start only (if `node_modules` is
+      missing), then `exec cron -f`.
+- [x] 4.2 (Superseded task text: "install it idempotently...") Instead: a new `backup-cron`
+      service in `docker-compose.yml`, bind-mounting the real deploy clone (read-write), the
+      deploy key, and the event store (read-only) at the exact absolute paths their respective
+      configs already expect — no host crontab touched at all, so there's nothing to
+      idempotently filter; `docker compose up -d backup-cron` is inherently idempotent (re-running
+      it doesn't create a second container). Confirmed via a real image build + throwaway
+      container run before this landed in compose: `node_modules` installed correctly into the
+      real host deploy clone via the bind mount; the baked crontab and `known_hosts` both present
+      and correct via `docker exec`.
+- [x] 4.3 Verify a real run: trigger the job manually (not by waiting for the schedule), confirm a
       commit lands and pushes to the real remote, then confirm a second immediate run produces
       the "ran, nothing new" evidence rather than either an error or total silence.
+      **Found and fixed live, during the very first triggered run:** the container had no git
+      identity configured; the first commit attempt failed with "Author identity unknown."
+      Fixed by setting `user.name`/`user.email` in the deploy clone's own local git config (same
+      treatment `core.sshCommand` already got — persists via the bind-mounted `.git`, no
+      container-side config needed). After that fix, verified for real against the actual
+      production repository: a manual trigger with real (empty, since no learner data exists
+      yet) content produced commit `bd204f1` ("data: sync event log"), pushed to `origin/main`
+      via the deploy key; an immediate second trigger produced commit `b4cedcf` ("chore: backup
+      ran, no new events"), also pushed; `backup-log.txt` correctly shows both timestamps.
+      The dirty-clone refusal was also verified live (an unrelated stray file blocked the run,
+      cleanly, with nothing committed) and the `/proc/1/fd` redirect confirmed to actually
+      surface a triggered run's output in `docker logs`.
 
 ## 5. Documentation
 
@@ -119,17 +169,19 @@ Each item maps to a scenario in `specs/deployment/spec.md`.
       confirm the event count is unchanged at each step.
 - [ ] 6.4 **Backup runs without a person:** trigger the cron entry directly (not by waiting a
       full day) and confirm a real commit + push happens end to end.
-- [ ] 6.5 **Coexistence:** diff the crontab before and after installation; confirm every
-      `pkm-maintenance` line is untouched and exactly one `# shizi-backup` line exists. Re-run the
-      installer and confirm still exactly one such line, not two.
+- [ ] 6.5 **Coexistence:** (revised for the container-based mechanism — see design.md) confirm
+      the host's own crontab is completely untouched (no `shizi`-related entry at all, since
+      nothing in this design writes to it); confirm `docker compose up -d backup-cron` run twice
+      results in exactly one `shizi-backup-cron` container, not two.
 - [ ] 6.6 **Commits only the canonical export:** introduce an unrelated uncommitted change in the
       deploy clone, run the backup wrapper, confirm it refuses and reports the conflict rather
       than committing it; clean up afterward.
 - [ ] 6.7 **Health is self-observable:** confirm `git log -1 --format=%cr -- data/events/` alone
       answers "is this working," and confirm a no-new-data run is distinguishable from silence
       (per 2.2's evidence mechanism).
-- [ ] 6.8 **Credential independence:** confirmed by construction (3.1's PAT is never tied to a
-      `gh` login) — record that this is verified by design, not by a destructive logout test on
-      a shared machine.
+- [ ] 6.8 **Credential independence:** confirmed by construction (3.1's deploy key is never tied
+      to the `gh` login used elsewhere on this machine) — record that this is verified by design,
+      not by a destructive logout test on a shared machine. Also confirmed directly: `git fetch`/
+      `git push` from the deploy clone succeed via the deploy key with no interactive prompt.
 - [ ] 6.9 **Event/rating/assignment counts unchanged throughout sections 1-6** — re-check against
       the baseline recorded in task 1.2 at the end of implementation.
