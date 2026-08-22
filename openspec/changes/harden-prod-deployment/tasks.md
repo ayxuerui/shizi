@@ -224,20 +224,52 @@ Each item maps to a scenario in `specs/deployment/spec.md`.
       observable. Confirmed against the real live (now image-based) `shizi-gateway` and a
       throwaway dev-flavored container rendering the same template file: one-line diff, exactly
       `sync` vs `sync-dev`.
-- [ ] 6.3 **The `rm -rf dist` class is dead:** delete `apps/assessment/dist` in the deploy clone,
+- [x] 6.3 **The `rm -rf dist` class is dead:** delete `apps/assessment/dist` in the deploy clone,
       then restart `shizi-gateway`, and confirm production still serves. Under the old bind-mount
-      this produced a real four-minute outage.
-- [ ] 6.4 **No checkout, still serving:** with prod running, move or rename the deploy clone, then
+      this produced a real four-minute outage. Confirmed against the real live production
+      deployment, twice — once before task 6.4's finding, once after the fix: `rm -rf` the
+      deploy clone's `dist/`, restart, still 200 throughout.
+- [x] 6.4 **No checkout, still serving:** with prod running, move or rename the deploy clone, then
       restart the gateway and confirm it still serves the application and `/assessment/sync/*`.
       Restore the clone afterward. This is the spec's "Every checkout on the host is deleted"
       scenario and the whole point of the change.
-- [ ] 6.5 **Config updates without a release:** change `config.json` in place, confirm the running
-      deployment serves the new content with no rebuild and no container recreate.
-- [ ] 6.6 **Rollback works:** bring up the previous date-tagged image and confirm it serves, then
-      return to current.
-- [ ] 6.7 **Credentials survive:** run `git clean -xfd` in the deploy clone, then recreate the sync
+      **This is the check that found the real bug** (see design.md's "Immutable app, mutable
+      config" and the risks entry it links). First run: moved the deploy clone aside, restarted
+      `shizi-gateway` → **502**, a real (brief) production outage, because `config.json`'s mount
+      source lived inside that clone. Restored immediately, root-caused, fixed in a follow-up PR
+      (#12: moved the mount to `~/.config/shizi/config.json`), merged, pulled into the deploy
+      clone, redeployed. **Re-run for real after the fix:** moved the ENTIRE deploy clone away
+      (confirmed gone from disk), restarted BOTH `shizi-gateway` and `shizi-sync` — `200` on
+      `/assessment/`, `{"status":"ok"}` on `/assessment/sync/health`, correct manifest name. This
+      now genuinely passes, not just on paper.
+- [x] 6.5 **Config updates without a release:** change `config.json` in place, confirm the running
+      deployment serves the new content with no rebuild and no container recreate. Confirmed
+      under the strongest possible condition — WHILE the deploy clone was still fully deleted
+      (task 6.4's live state): edited `~/.config/shizi/config.json` in place, added a marker
+      field, confirmed it appeared in the live served response immediately with no rebuild/
+      recreate; reverted, confirmed the marker disappeared immediately.
+- [x] 6.6 **Rollback works:** bring up the previous date-tagged image and confirm it serves, then
+      return to current. **Found while testing this:** the first attempt (re-tagging
+      `2026-08-21` as `latest`) was a false verification — Docker's build cache had produced the
+      IDENTICAL image ID for every date tag so far (nothing in the image's actual build content
+      had changed across those tags; only the compose file's mount path had), so "rolling back"
+      swapped nothing real. Built a genuinely distinct image (`--build-arg
+      VITE_SYNC_TOKEN=ROLLBACK-TEST-MARKER-VALUE`, a different image ID), swapped `latest` to it,
+      confirmed the marker string was actually present in the live served JS bundle (real content
+      change, not just a tag pointer), then swapped back to the real current release and
+      confirmed the marker was gone again. Rollback mechanism now genuinely proven, not just
+      exercised.
+- [x] 6.7 **Credentials survive:** run `git clean -xfd` in the deploy clone, then recreate the sync
       container and confirm it still starts and still authenticates a request from the currently
-      released build.
-- [ ] 6.8 **Event store untouched throughout:** record the event count before starting section 5
+      released build. Confirmed: `git clean -xfd` removed `node_modules/` and the (unused, since
+      the fix) in-clone `config.json` placeholder; `docker compose build sync` still succeeded
+      (the Dockerfile's own `npm ci` never depended on host `node_modules`); recreated container
+      started and an authenticated event POST using the `~/.config/shizi/prod.env` token
+      round-tripped `200`.
+- [x] 6.8 **Event store untouched throughout:** record the event count before starting section 5
       and confirm it is unchanged at the end. Real learner data may exist by the time this is
-      implemented — treat the store as production data, not test data.
+      implemented — treat the store as production data, not test data. Checked at every single
+      step of the real cutover and every destructive test in section 6 (before/after each of
+      6.3's `rm -rf`, 6.4's clone deletion — twice, including the outage — 6.6's rollback swaps,
+      and 6.7's `git clean -xfd`): **0 events, 0 ratings throughout, no exceptions.** No real
+      learner data existed yet at any point during this change's implementation.
