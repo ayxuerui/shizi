@@ -24,6 +24,14 @@ coverage/
 # data/events/events.jsonl (see infra/sync-service/scripts/pull-events.ts).
 infra/sync-service/data/
 
+# harden-prod-deployment: published learner config is runtime-generated,
+# derived data (infra/sync-service/scripts/publish-config.ts), regenerated
+# on its own cadence independent of the app — not a build input, so it's
+# never committed. docker-compose.yml's gateway service bind-mounts this
+# exact file (must exist, even empty, before the first `docker compose up`
+# — see infra/README.md).
+apps/assessment/public/config.json
+
 # Editor
 .vscode/*
 !.vscode/extensions.json

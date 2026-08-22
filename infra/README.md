@@ -86,28 +86,65 @@ reversible — nothing about the migration deletes it. See
 its "Pinning `name: shizi` now" decision entry for why this was done before any real learner
 data exists rather than deferred.
 
-## Setup
+## Credentials: `~/.config/shizi/`
 
-1. Copy `sync-service/.env.example` to `sync-service/.env` and set `SYNC_SHARED_TOKEN` (e.g.
-   `openssl rand -hex 32`). The service refuses to start without it.
-2. Copy `apps/assessment/.env.example` to `apps/assessment/.env` —
-   `VITE_SYNC_ENDPOINT=/assessment/sync` is already the right default (see "Domain reuse" above); set
-   `VITE_SYNC_TOKEN` to the same value as step 1's `SYNC_SHARED_TOKEN`.
-3. Build the app: `npm run build --workspace=apps/assessment`.
-4. `docker compose up -d gateway sync` from the repo root.
-5. **Your own action, outside this repo:** in the Cloudflare Zero Trust dashboard, edit the existing
-   `shizi.realxco.com` public hostname entry to point at the `gateway` container (`shizi-gateway`)
-   instead of `spikes`. No new hostname, no path-based ingress rule to add there — nginx handles the
-   whole `/assessment` + `/assessment/sync` split internally (see `nginx-assessment.conf.template`).
+(`harden-prod-deployment`.) `SYNC_SHARED_TOKEN`/`VITE_SYNC_TOKEN` — one shared token, not two
+independent secrets — live in `~/.config/shizi/prod.env` (dev: `~/.config/shizi/dev.env`),
+**outside every git working tree**. Before this, the only on-disk copy was inside whatever
+checkout happened to be running production; a `git clean -xfd`, a branch switch, or a worktree
+deletion could destroy it. Create it once:
 
-**Do not `rm -rf apps/assessment/dist` and rebuild in place while `gateway` is running.**
-`gateway`'s bind mount is established by inode at container start; recreating the directory at
-the same path (rather than overwriting files within it) leaves the running container's mount
-pointing at nothing. `npm run build` alone (no `rm -rf` first) is safe — Vite overwrites files
-in place. If you do need to wipe `dist/` first, run `docker restart shizi-gateway` afterward, and
-confirm with `curl localhost:8081/assessment/`. (Discovered the hard way while verifying this
-very section — see `openspec/changes/add-dev-deployment/design.md`'s "Two builds in one repo can
-be confused on the host" risk entry.)
+```
+mkdir -p ~/.config/shizi && chmod 700 ~/.config/shizi
+cat > ~/.config/shizi/prod.env <<EOF
+SYNC_SHARED_TOKEN=$(openssl rand -hex 32)
+VITE_SYNC_TOKEN=<same value as SYNC_SHARED_TOKEN above>
+EOF
+chmod 600 ~/.config/shizi/prod.env
+```
+
+Also record this value somewhere durable and off this machine (a password manager) — nothing in
+this repo should be its only copy. This file is used two ways: `docker-compose.yml`'s `sync`
+service reads it directly via `env_file:`; the release procedure below `source`s it so
+`VITE_SYNC_TOKEN` is available as a shell variable for the gateway image's build arg (a build arg
+comes from the invoking shell's environment, not a container's `env_file`).
+
+**Rotating the token** is a two-step operation, not a single edit: change both lines in this
+file, **then release a new gateway build** against the new value (see "Releasing a new version"
+below) — the served app has the old value baked in until you do. Any client holding events
+queued from before the rotation will get `401`s on every sync attempt until it receives a build
+built against the new token. There is no way around this coupling; it's the cost of a shared
+token rather than per-client credentials, accepted at this project's scale (see
+`bootstrap-shizi-assessment`'s design.md).
+
+## Releasing a new version
+
+From the deploy clone (`~/deploy/shizi` — see "Where production runs from" below), never from a
+Claude Code session worktree or any other throwaway checkout:
+
+```
+cd ~/deploy/shizi
+git pull
+set -a; source ~/.config/shizi/prod.env; set +a
+docker compose build gateway sync
+docker tag shizi-gateway:latest shizi-gateway:$(date +%F)
+docker compose up -d gateway sync
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8081/assessment/   # expect 200
+```
+
+**Rolling back** to the previous release:
+
+```
+docker tag shizi-gateway:<previous-date> shizi-gateway:latest
+docker compose up -d --no-build gateway
+```
+
+**Production no longer depends on `rm -rf apps/assessment/dist` being safe** — the old
+bind-mount hazard doesn't apply once `gateway` serves a built image; deleting `dist/` in the
+deploy clone (or the deploy clone itself) does not affect the running container until you choose
+to release again. That hazard is now specific to the **dev** stack, which still bind-mounts a
+working tree on purpose — see "Dev environment" below, and don't `rm -rf` its `dist/` in place
+while `gateway-dev` is running without also `docker restart`ing it afterward.
 
 ## Dev environment: `shizi-dev.realxco.com`
 
