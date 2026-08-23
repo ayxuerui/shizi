@@ -90,8 +90,11 @@
       the user's own action** — same as `harden-prod-deployment`'s task 0.2 for the sync token; I
       have no password-manager access. Unlike that token, this key is not embedded in anything
       served publicly, so losing the only copy would mean generating and re-registering a new
-      one (a few-minute fix), not a security exposure — lower urgency than the sync token, but
-      still worth a durable off-machine copy.
+      one (a few-minute fix), not a security exposure.
+      **User decision, 2026-08-23:** explicitly declined the password-manager copy — accepts
+      losing this key as a non-event, since regenerating and re-registering a replacement is
+      cheap and nothing else depends on this specific key material. Recorded as a deliberate
+      choice, not an overlooked follow-up; not revisited unless the user asks.
 - [x] 3.3 Configure the deploy clone's git remote (or the wrapper script directly) to push using
       this credential, independent of any `gh`-managed helper. `origin` switched to the SSH URL
       (`git@github.com:ayxuerui/shizi.git`); `core.sshCommand` set LOCALLY in the deploy clone
