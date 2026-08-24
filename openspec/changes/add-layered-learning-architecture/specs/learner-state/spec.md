@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
-### Requirement: Progress context is the outward contract for other layers
-The learner-state capability SHALL expose a progress context — a derived read model of what a
+### Requirement: Learner context is the outward contract for other layers
+The learner-state capability SHALL expose a learner context — a derived read model of what a
 consumer is entitled to know about a learner's progress — as the supported way for other layers to
 read progress. Consumers SHALL obtain progress facts from that context rather than re-deriving them
 from the raw event history. The context SHALL be computed as a projection over the event log, never
@@ -9,27 +9,27 @@ stored as independently-editable state.
 
 #### Scenario: A consumer needs to know a learner's progress
 - **WHEN** another layer needs to know what the learner knows
-- **THEN** it SHALL obtain a progress context from this capability, rather than reading the event
+- **THEN** it SHALL obtain a learner context from this capability, rather than reading the event
   history and computing mastery, known-set membership, or recency itself
 
 #### Scenario: The context is derived, not stored
-- **WHEN** a progress context is produced
+- **WHEN** a learner context is produced
 - **THEN** it SHALL be computed from the event log at the time of the request, and no part of it SHALL
   be persisted as separately-editable state
 
 #### Scenario: Two consumers see the same progress
-- **WHEN** two different consumers request a progress context against the same event history and
+- **WHEN** two different consumers request a learner context against the same event history and
   configuration
 - **THEN** both SHALL receive the same progress facts
 
-### Requirement: Progress context carries mastery, recency, and introduction ordering
-A progress context SHALL report, for the units it covers: each unit's mastery state, each unit's most
+### Requirement: Learner context carries mastery, recency, and introduction ordering
+A learner context SHALL report, for the units it covers: each unit's mastery state, each unit's most
 recent exposure, whether a unit has ever been presented in any activity, and the order in which units
 were first introduced. These facts SHALL be available without the consumer inspecting individual
 events.
 
 #### Scenario: Mastery state per unit
-- **WHEN** a consumer reads a progress context
+- **WHEN** a consumer reads a learner context
 - **THEN** it SHALL be able to determine each covered unit's mastery state without examining
   individual events
 
@@ -48,10 +48,10 @@ events.
   has never been presented at all, and SHALL NOT report it as having a mastery state derived from that
   presentation
 
-### Requirement: Progress context is available offline
-A progress context SHALL be derivable entirely from the event history already present on the device,
+### Requirement: Learner context is available offline
+A learner context SHALL be derivable entirely from the event history already present on the device,
 with no network connectivity, so that every consumer of it remains fully usable offline.
 
 #### Scenario: Context requested with no connectivity
-- **WHEN** a consumer requests a progress context while the device has no network connection
+- **WHEN** a consumer requests a learner context while the device has no network connection
 - **THEN** the context SHALL be produced from locally-held event history with no visible degradation

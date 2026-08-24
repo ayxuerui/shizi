@@ -8,7 +8,7 @@ logic was re-derived, which left no single answer to "how is the next activity c
 ## ADDED Requirements
 
 ### Requirement: Activity selection is driven by supplied context, goals, and review queue
-The learning layer SHALL obtain the learner's progress context from the progression layer, the
+The learning layer SHALL obtain the learner's learner context from the progression layer, the
 current batch of learning goals from the curriculum layer, and the queue of units due for review from
 the review-scheduling capability, and SHALL select the next activity from those inputs alone. It
 SHALL NOT compute mastery, known-set membership, exposure recency, goal ordering, or review due-ness
@@ -17,11 +17,11 @@ context.
 
 #### Scenario: Next activity is selected from context and goals
 - **WHEN** the learning layer is asked for the next activity
-- **THEN** it SHALL request a progress context from the progression layer, request a goal batch from
+- **THEN** it SHALL request a learner context from the progression layer, request a goal batch from
   the curriculum layer using that context, and return an activity determined by those inputs
 
 #### Scenario: Progression logic is not reimplemented
-- **WHEN** the supplied progress context reports a unit's mastery state
+- **WHEN** the supplied learner context reports a unit's mastery state
 - **THEN** the learning layer SHALL use that reported state rather than deriving a mastery state of
   its own from underlying history, even where the underlying history is available to it
 
@@ -35,7 +35,7 @@ context.
   interval rule of its own to decide due-ness or the queue's order
 
 #### Scenario: Selection is reproducible
-- **WHEN** activity selection runs twice against the same progress context, goal batch, and
+- **WHEN** activity selection runs twice against the same learner context, goal batch, and
   configuration
 - **THEN** it SHALL select the same activity both times
 
@@ -104,7 +104,7 @@ history, and SHALL NOT treat an activity as complete on the basis of state it ho
 
 ### Requirement: A stale or absent published plan degrades rather than blocks
 The learning layer SHALL tolerate a curriculum plan that is absent, incomplete, or computed against
-an older progress context. It SHALL filter a published batch against the current progress context
+an older learner context. It SHALL filter a published batch against the current learner context
 before using it, and SHALL still produce an activity when no published plan is available at all.
 
 #### Scenario: Published plan is absent
@@ -112,7 +112,7 @@ before using it, and SHALL still produce an activity when no published plan is a
 - **THEN** the learning layer SHALL still select and deliver an activity
 
 #### Scenario: Published batch contains already-mastered goals
-- **WHEN** a published batch includes a goal the current progress context reports as already mastered
+- **WHEN** a published batch includes a goal the current learner context reports as already mastered
 - **THEN** that goal SHALL be excluded from the batch the learner works on
 
 #### Scenario: A plan is republished mid-batch
@@ -121,7 +121,7 @@ before using it, and SHALL still produce an activity when no published plan is a
 
 ### Requirement: Full offline operation
 The learning layer SHALL select, deliver, and report activities with no network connectivity, using
-only the progress context and curriculum plan already available on the device.
+only the learner context and curriculum plan already available on the device.
 
 #### Scenario: Activity selection with no connectivity
 - **WHEN** the device has no network connection

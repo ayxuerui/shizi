@@ -21,12 +21,12 @@ reviewed *ahead of time* rather than computed on the child's device mid-session.
 ## What Changes
 
 - **Introduce a `learning-orchestration` capability** — the Learning Layer, as its own package rather
-  than app-local code. It reads a progress context from the progression layer, requests the next
+  than app-local code. It reads a learner context from the progression layer, requests the next
   batch of learning goals from the curriculum layer, selects which activity to deliver, and reports
   every outcome back. The app becomes a renderer that consumes its decisions, not the thing making
   them.
 - **Define the three layer contracts explicitly**, each owned by the layer that produces it: the
-  progression layer exposes a *progress context* (a read model, not raw events); the curriculum layer
+  progression layer exposes a *learner context* (a read model, not raw events); the curriculum layer
   accepts that context and returns a *learning-goal batch*; the learning layer consumes the batch and
   reports outcomes. No layer reaches past its neighbour.
 - **The curriculum layer's batch sequence becomes pre-generated and published**, computed repo-side at
@@ -62,7 +62,7 @@ reviewed *ahead of time* rather than computed on the child's device mid-session.
 - **Relocate, not rewrite, the existing ad-hoc orchestrator.** `activity-selector.ts`,
   `memory-session.ts`, and `PracticeRouter.tsx`'s decision logic move behind the new layer boundary.
   The observable play loop does not change; where the decision lives does.
-- **Not a breaking change to the event schema.** The progress context is a derived read model over the
+- **Not a breaking change to the event schema.** The learner context is a derived read model over the
   existing event log — no new persisted shape, no migration. (`add-tiered-content-progression` is the
   change that breaks that schema; this one deliberately does not touch it.)
 
@@ -70,7 +70,7 @@ reviewed *ahead of time* rather than computed on the child's device mid-session.
 
 ### New Capabilities
 - `learning-orchestration`: The Learning Layer. Which activity the learner does next and why, the
-  contract it uses to obtain a progress context and a learning-goal batch, the requirement that it
+  contract it uses to obtain a learner context and a learning-goal batch, the requirement that it
   never reimplements selection or mastery logic itself, and the obligation to report every activity
   outcome back to the progression layer.
 - `memory-review`: Review-bout *delivery* — consuming a supplied due queue without redefining
@@ -80,12 +80,12 @@ reviewed *ahead of time* rather than computed on the child's device mid-session.
   not duplicate, `review-scheduling`.
 
 ### Modified Capabilities
-- `curriculum`: Gains a batch-shaped, context-driven output contract — it accepts a progress context
+- `curriculum`: Gains a batch-shaped, context-driven output contract — it accepts a learner context
   and returns a batch of learning goals, rather than exposing single-character selection as its
   primary surface. The batch sequence becomes a published, reviewable artifact produced ahead of time
   rather than computed per request. Purpose statement widens from "which character" to "which learning
   goals."
-- `learner-state`: Gains a defined *progress context* read model as its outward-facing surface for
+- `learner-state`: Gains a defined *learner context* read model as its outward-facing surface for
   other layers — what a consumer is entitled to know about progress, derived from the event log.
   Existing append-only/projection requirements are unchanged; this adds a consumer-facing contract on
   top so callers stop hand-rolling equivalent derivations.
@@ -93,7 +93,7 @@ reviewed *ahead of time* rather than computed on the child's device mid-session.
 ## Impact
 
 - **Packages**: new `learning-orchestration` package; `@shizi/curriculum` gains the batch/context
-  contract and loses nothing; `@shizi/learner-state` gains the progress-context read model.
+  contract and loses nothing; `@shizi/learner-state` gains the learner-context read model.
   `@shizi/exposure-engine` and `@shizi/assessment-engine` become activity implementations invoked
   *by* the learning layer rather than composed directly by the app.
 - **App**: `apps/assessment` — `session/activity-selector.ts` and `session/memory-session.ts` move out
