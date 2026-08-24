@@ -83,9 +83,9 @@ happened rather than duplicating event persistence. Without this seam the layer 
 re-read the event log to notice its own decision completed, which is the re-derivation this change
 exists to remove.
 
-### 3. Progress context is computed in `learner-state`, and separates "presented" from "mastered"
+### 3. Learner context is computed in `learner-state`, and separates "presented" from "mastered"
 
-`learner-state` gains a `ProgressContext` projection carrying: mastery state per unit, the known set,
+`learner-state` gains a `LearnerContext` projection carrying: mastery state per unit, the known set,
 the set of units ever presented, last-exposure time per unit, and first-introduction ordering.
 `deriveRecentlyIntroduced` and the last-exposure map move out of the app into this projection.
 
@@ -186,7 +186,7 @@ identity in one repo is the failure mode to avoid.
   change's tasks.md is re-pointed to reference it rather than both editing the script. Its parent
   tag-review gate is unaffected and stays its own concern.
 - **[Risk] `add-tiered-content-progression` breaks the event schema this design reads.** → The goal
-  reference is shaped to be adoptable (decision 7), and the progress context is a projection, so a
+  reference is shaped to be adoptable (decision 7), and the learner context is a projection, so a
   schema change re-derives it rather than migrating it. Whichever change lands second rebases onto
   the other; they must not edit unit identity concurrently.
 - **[Trade-off] Indirection with no user-visible payoff in this change.** The learner sees nothing
@@ -203,10 +203,10 @@ identity in one repo is the failure mode to avoid.
 
 ## Migration Plan
 
-No data migration — the progress context is derived, and the event schema is untouched. Each step is
+No data migration — the learner context is derived, and the event schema is untouched. Each step is
 independently landable and leaves the app working:
 
-1. Add the `ProgressContext` projection to `learner-state` (pure addition, no consumer changes yet).
+1. Add the `LearnerContext` projection to `learner-state` (pure addition, no consumer changes yet).
 2. Add curriculum's context-driven batch contract over the existing `composeBatch`/`composeBatchPlan`.
 3. Create `packages/learning-orchestration` with the decision logic ported from `activity-selector.ts`,
    tests first, reading the new projection instead of re-deriving.

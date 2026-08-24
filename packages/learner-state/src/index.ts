@@ -18,4 +18,7 @@ export {
 
 export { computeKnownSet } from "./known-set-projection.js";
 
+export type { LearnerContext } from "./learner-context.js";
+export { deriveLearnerContext } from "./learner-context.js";
+
 export { exportToJsonl, parseJsonl, toJsonl, fromJsonl } from "./export.js";

@@ -1,14 +1,14 @@
 ## ADDED Requirements
 
 ### Requirement: Context-driven batch output
-The curriculum capability SHALL accept a learner's progress context and return a batch of learning
+The curriculum capability SHALL accept a learner's learner context and return a batch of learning
 goals as its outward-facing contract, rather than requiring a consumer to drive single-unit selection
 repeatedly and accumulate the results itself. Batch size SHALL be configurable. The confusability
 spacing constraint SHALL hold across the members of a single returned batch, not only against
 previously-introduced units.
 
 #### Scenario: Requesting the next batch
-- **WHEN** a consumer supplies a progress context and requests the next batch of goals
+- **WHEN** a consumer supplies a learner context and requests the next batch of goals
 - **THEN** the capability SHALL return a batch of not-yet-known goals selected by the existing
   sequencing rules, in the order they are intended to be taught
 
@@ -22,7 +22,7 @@ previously-introduced units.
   including a goal that violates the spacing constraint
 
 #### Scenario: Batch composition is reproducible
-- **WHEN** a batch is requested twice against the same progress context, candidate pool, and
+- **WHEN** a batch is requested twice against the same learner context, candidate pool, and
   configuration
 - **THEN** the same batch SHALL be returned both times
 
