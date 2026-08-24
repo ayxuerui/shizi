@@ -17,8 +17,10 @@
 # traffic. Tear this stack down (`docker compose -f
 # docker-compose.dev.yml down`) before verifying a different checkout.
 #
-# Run from whatever tree holds the build you're verifying:
-#   npm run build --workspace=apps/assessment -- --mode dev
+# Run from whatever tree holds the build you're verifying (build vite
+# directly — `npm run build -- --mode dev` appends the flag to the end of
+# the whole &&-chained script, where vite never sees it):
+#   (cd apps/assessment && npx vite build --mode dev && node scripts/check-precache.mjs)
 #   docker compose -f docker-compose.dev.yml up -d --build
 name: shizi-dev
 
