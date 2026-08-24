@@ -123,28 +123,6 @@ describe("AssessmentSession — guess-detection-to-mastery wiring (task 8.5, reu
   });
 });
 
-describe("AssessmentSession — matched-pair assignment wiring (task 8.13)", () => {
-  it("records an assignment before any response is known, on a character's first-ever informative exposure", () => {
-    const session = new AssessmentSession({
-      sessionId: "s1",
-      pool,
-      config: { ...DEFAULT_ASSESSMENT_SESSION_CONFIG, dilution: { easyPerInformative: 0 } },
-      deps: makeDeps(),
-    });
-
-    expect(session.getAssignments()).toHaveLength(0);
-    const next = session.nextProbe();
-    if (next.status !== "probe") throw new Error("expected a probe");
-
-    // Assignment (if this character had a match) is recorded by nextProbe
-    // itself — BEFORE recordResponse is ever called, per the
-    // adaptivity-instrumentation spec's "before the outcome is known".
-    const assignmentsBeforeResponse = session.getAssignments().length;
-    session.recordResponse({ character: next.probe.character, outcome: "incorrect", latencyMs: 4000, adultPresent: true });
-    expect(session.getAssignments()).toHaveLength(assignmentsBeforeResponse);
-  });
-});
-
 describe("AssessmentSession — full bout integration against the real candidate pool", () => {
   const MAX_ITEMS = 25; // multiple of the default dilution block size (5), for an exact ratio
 
@@ -253,6 +231,5 @@ describe("AssessmentSession — full bout integration against the real candidate
     const second = runFullSession(makeDeps());
     expect(second.probeKinds).toEqual(first.probeKinds);
     expect(second.session.getEvents()).toEqual(first.session.getEvents());
-    expect(second.session.getAssignments()).toEqual(first.session.getAssignments());
   });
 });

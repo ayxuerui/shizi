@@ -107,4 +107,37 @@ describe("computeMasteryStates (learner-state spec: 'Known-set and mastery proje
       computeMasteryStates(events, { guessDetectionThresholdMs: 3000 }).get("山"),
     ).toBe("known"); // looser threshold now qualifies
   });
+
+  describe("recognition-modality filter (add-tracing-modality-arm spec: 'Exposure outcome does not promote mastery state')", () => {
+    it("two fast-correct exposure (non-recognition) events do not promote to known", () => {
+      const states = computeMasteryStates([
+        event({ modality: "expose-listen", latencyMs: FAST }),
+        event({ modality: "expose-trace", latencyMs: FAST }),
+      ]);
+      expect(states.has("山")).toBe(false); // no recognition events at all -> unseen, not even "probing"
+    });
+
+    it("a hear-tap (recognition) event still behaves exactly as before, alongside exposure events for the same character", () => {
+      const states = computeMasteryStates([
+        event({ modality: "expose-listen", latencyMs: FAST }),
+        event({ modality: "hear-tap", latencyMs: FAST }),
+        event({ modality: "hear-tap", latencyMs: FAST }),
+      ]);
+      expect(states.get("山")).toBe("known"); // only the two hear-tap events count
+    });
+
+    it("recognitionModalities is configurable, not hard-coded", () => {
+      const events = [
+        event({ modality: "expose-trace", latencyMs: FAST }),
+        event({ modality: "expose-trace", latencyMs: FAST }),
+      ];
+      expect(computeMasteryStates(events).get("山")).toBeUndefined();
+      expect(
+        computeMasteryStates(events, {
+          guessDetectionThresholdMs: DEFAULT_MASTERY_CONFIG.guessDetectionThresholdMs,
+          recognitionModalities: new Set(["expose-trace"]),
+        }).get("山"),
+      ).toBe("known");
+    });
+  });
 });

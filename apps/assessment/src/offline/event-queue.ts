@@ -57,6 +57,19 @@ export async function listPendingAssignments(): Promise<PendingAssignment[]> {
   return pending;
 }
 
+/**
+ * Loads every arm assignment this device has ever recorded (synced or
+ * not), for seeding `ExposureSession.priorAssignments` on the next
+ * launch — same "local history, not just the outbox" purpose as
+ * `loadPriorEvents`. Needed so "existing assignment is honored" survives
+ * a relaunch, not just a single in-memory session.
+ */
+export async function loadAllAssignments(): Promise<ArmAssignment[]> {
+  const db = await getDB();
+  const all = await db.getAll("assignments");
+  return all.map((stored) => stored.assignment);
+}
+
 export async function markAssignmentsSynced(keys: readonly number[]): Promise<void> {
   if (keys.length === 0) return;
   const db = await getDB();

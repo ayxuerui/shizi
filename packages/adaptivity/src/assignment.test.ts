@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { assignPairToArms, AssignmentLog } from "./assignment.js";
-import type { MatchedPair } from "./types.js";
+import { assignPairToArms, AssignmentLog, findAssignmentForCharacter } from "./assignment.js";
+import type { ArmAssignment, MatchedPair } from "./types.js";
 
 const pair: MatchedPair = { characters: ["山", "水"] };
 
@@ -60,5 +60,23 @@ describe("AssignmentLog", () => {
     expect(log.update).toBeUndefined();
     // @ts-expect-error - deliberately checking these don't exist on the type
     expect(log.delete).toBeUndefined();
+  });
+});
+
+describe("findAssignmentForCharacter (add-tracing-modality-arm: 'existing assignment is honored')", () => {
+  it("returns undefined when no assignment exists for the character", () => {
+    expect(findAssignmentForCharacter([], "山")).toBeUndefined();
+  });
+
+  it("finds the assignment matching the character", () => {
+    const [a, b] = assignPairToArms(pair, ["hear-tap"]);
+    expect(findAssignmentForCharacter([a, b], "水")).toEqual(b);
+  });
+
+  it("returns the most recently assigned match if more than one exists", () => {
+    const older: ArmAssignment = { character: "山", arm: "expose-listen", pairId: "p1", assignedAt: "2026-08-01T00:00:00.000Z" };
+    const newer: ArmAssignment = { character: "山", arm: "expose-trace", pairId: "p2", assignedAt: "2026-08-02T00:00:00.000Z" };
+    expect(findAssignmentForCharacter([older, newer], "山")).toEqual(newer);
+    expect(findAssignmentForCharacter([newer, older], "山")).toEqual(newer);
   });
 });

@@ -8,8 +8,8 @@ import {
 } from "@shizi/assessment-engine";
 import type { CandidatePool } from "@shizi/character-data";
 import type { LearnerEvent } from "@shizi/learner-state";
-import type { ArmAssignment, Rating, SessionRating } from "@shizi/adaptivity";
-import { enqueueAssignments, enqueueEvent, enqueueRating, loadPriorEvents } from "../offline/event-queue.js";
+import type { Rating, SessionRating } from "@shizi/adaptivity";
+import { enqueueEvent, enqueueRating, loadPriorEvents } from "../offline/event-queue.js";
 import { flushQueue } from "../offline/sync.js";
 import { boutReducer, INITIAL_BOUT_STATE, type BoutState } from "./bout-machine.js";
 import { createSessionClock } from "./session-clock.js";
@@ -23,10 +23,6 @@ const RESOLVE_DELAY_MS = 700;
 async function defaultOnEvent(event: LearnerEvent): Promise<void> {
   await enqueueEvent(event);
   void flushQueue(); // fire-and-forget — a sync failure must never block or surface to the child.
-}
-
-async function defaultOnAssignments(assignments: readonly ArmAssignment[]): Promise<void> {
-  await enqueueAssignments(assignments);
 }
 
 async function defaultOnRating(rating: SessionRating): Promise<void> {
@@ -45,7 +41,6 @@ export interface UseAssessmentSessionOptions {
   /** Clock for latency measurement — defaults to `performance.now()`; tests inject a scripted sequence. */
   nowMs?: () => number;
   onEvent?: (event: LearnerEvent) => void | Promise<void>;
-  onAssignments?: (assignments: readonly ArmAssignment[]) => void | Promise<void>;
   onRating?: (rating: SessionRating) => void | Promise<void>;
 }
 
@@ -72,8 +67,8 @@ export interface UseAssessmentSessionResult {
  * The composition seam between `AssessmentSession` (the headless engine,
  * Pass 1) and this app's UI. Builds exactly ONE `AssessmentSession` per
  * mount via a `useRef` guard — not a `useState` initializer, which React
- * 18 StrictMode double-invokes and would build two engines with two
- * independent `AssignmentLog`s (see `initializedRef` below).
+ * 18 StrictMode double-invokes and would build two independent engines
+ * (see `initializedRef` below).
  *
  * `classification`/`masteryState` from `recordResponse` are read and
  * immediately discarded here — they never enter `BoutState`, which is
@@ -89,7 +84,6 @@ export function useAssessmentSession(options: UseAssessmentSessionOptions): UseA
     loadPriorEvents: loadPriorEventsImpl = loadPriorEvents,
     nowMs = () => performance.now(),
     onEvent = defaultOnEvent,
-    onAssignments = defaultOnAssignments,
     onRating = defaultOnRating,
   } = options;
 
@@ -135,8 +129,6 @@ export function useAssessmentSession(options: UseAssessmentSessionOptions): UseA
       dispatch({ type: "PROBE_READY", probe: result.probe });
     } else {
       dispatch({ type: "SESSION_COMPLETE", reason: result.reason });
-      const assignments = session.getAssignments();
-      if (assignments.length > 0) void onAssignments(assignments);
     }
   }
 

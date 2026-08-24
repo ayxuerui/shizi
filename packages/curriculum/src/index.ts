@@ -1,6 +1,7 @@
 export const PACKAGE_NAME = "@shizi/curriculum";
 
 export type {
+  ComposedBatch,
   CurriculumConfig,
   CurriculumState,
   ScoredCandidate,
@@ -13,3 +14,4 @@ export { isPhaseAExhausted, selectFromPhaseA } from "./phase-a.js";
 export { scoreCandidate } from "./scoring.js";
 export { filterBySpacing, violatesSpacingConstraint } from "./spacing.js";
 export { selectNextCharacter } from "./select.js";
+export { composeBatch, composeBatchPlan } from "./batch.js";

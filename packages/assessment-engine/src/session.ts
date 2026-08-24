@@ -1,6 +1,5 @@
 import type { CandidatePool } from "@shizi/character-data";
-import { buildConfusabilityIndex, computeConfusability, IDENTITY_CHARACTERS, isUsable } from "@shizi/character-data";
-import { assignPairToArms, AssignmentLog, findMatchedPairs, type ArmAssignment } from "@shizi/adaptivity";
+import { buildConfusabilityIndex, computeConfusability, IDENTITY_CHARACTERS } from "@shizi/character-data";
 import {
   computeKnownSet,
   computeMasteryStates,
@@ -39,12 +38,17 @@ export interface CreateAssessmentSessionOptions {
  * Orchestrates one assessment bout end-to-end: adaptive frontier-search
  * probe selection (8.4), guess-detection-aware event emission (8.5, 8.12),
  * felt-difficulty dilution (8.6), Loop 4 difficulty calibration (8.7),
- * session bounding (8.10), and matched-pair arm assignment (8.13).
+ * session bounding (8.10).
+ *
+ * Matched-pair arm assignment (originally 8.13) no longer happens here —
+ * `add-tracing-modality-arm` design.md's "Arm assignment moves from probe
+ * time to introduction time" moved it to `@shizi/exposure-engine`, since
+ * frontier search here often probes a character that turns out to
+ * already be known and is never introduced through exposure at all.
  *
  * Deterministic given the same `priorEvents`, `config`, and `deps` —
  * every source of randomness or wall-clock time is injected, never read
- * directly (see `SessionDeps` and `@shizi/adaptivity`'s `AssignmentDeps`
- * precedent this follows).
+ * directly (see `SessionDeps`).
  */
 export class AssessmentSession {
   readonly sessionId: string;
@@ -54,7 +58,6 @@ export class AssessmentSession {
   private readonly deps: SessionDeps;
   private readonly priorEvents: readonly LearnerEvent[];
   private readonly eventLog = new EventLog();
-  private readonly assignmentLog = new AssignmentLog();
   private readonly difficultyIndex: ReadonlyMap<string, number>;
   private readonly confusabilityIndex: ReadonlyMap<string, ReadonlySet<string>>;
   private readonly startElapsedMs: number;
@@ -125,7 +128,6 @@ export class AssessmentSession {
     }
 
     const kind: ProbeKind = character !== null ? "easy" : "informative";
-    let isFirstEverExposure = false;
 
     if (character === null) {
       const forceIdentityOrShaky =
@@ -141,7 +143,6 @@ export class AssessmentSession {
         const picked = selectNextFrontierProbe(candidates, bounds, this.informativeSlotsServed);
         if (picked) {
           character = picked.character;
-          isFirstEverExposure = events.every((event) => event.character !== character);
         } else if (identityAndShakyPool.length > 0) {
           // Frontier genuinely exhausted (every usable candidate is
           // known) — fall back to identity/shaky rotation rather than
@@ -160,10 +161,6 @@ export class AssessmentSession {
       return { status: "session-complete", reason: "item-count" };
     }
 
-    if (isFirstEverExposure) {
-      this.recordMatchedPairAssignment(character, knownSet);
-    }
-
     const distractorCount = Math.max(0, this.config.optionCount - 1);
     const distractors = pickDistractors(
       character,
@@ -179,35 +176,6 @@ export class AssessmentSession {
     this.probesIssued += 1;
 
     return { status: "probe", probe: { character, kind, options } };
-  }
-
-  /**
-   * Per `adaptivity-instrumentation` spec: pairs and randomly assigns
-   * arms BEFORE the outcome is known — called from `nextProbe`, at
-   * presentation time, not from `recordResponse`. Only fires for a
-   * genuinely first-ever exposure to a usable, not-yet-known productive
-   * candidate (identity/shaky-forced picks never reach here — they lack
-   * a `frequencyRank`, so `isMatchedPair` can never match them anyway;
-   * see `character-data`'s exclusion.ts).
-   */
-  private recordMatchedPairAssignment(character: string, knownSet: ReadonlySet<string>): void {
-    const notYetKnownUsable = [character];
-    for (const [candidate, attributes] of this.pool) {
-      if (candidate === character) continue;
-      if (knownSet.has(candidate)) continue;
-      if (!isUsable(attributes)) continue;
-      notYetKnownUsable.push(candidate);
-    }
-
-    const pairs = findMatchedPairs(this.pool, notYetKnownUsable, this.confusabilityIndex, this.config.matchCriteria);
-    const pair = pairs.find((p) => p.characters.includes(character));
-    if (!pair) return;
-
-    const assignments: [ArmAssignment, ArmAssignment] = assignPairToArms(pair, this.config.arms, {
-      now: this.deps.now,
-      random: this.deps.random,
-    });
-    this.assignmentLog.recordPair(assignments);
   }
 
   /**
@@ -286,9 +254,5 @@ export class AssessmentSession {
   /** This session's events only (not prior history) — the caller flushes these to the durable event log. */
   getEvents(): readonly LearnerEvent[] {
     return this.eventLog.getEvents();
-  }
-
-  getAssignments(): readonly ArmAssignment[] {
-    return this.assignmentLog.getAssignments();
   }
 }

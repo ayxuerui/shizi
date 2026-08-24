@@ -1,5 +1,29 @@
 import type { Arm, ArmAssignment, MatchedPair } from "./types.js";
 
+/**
+ * Looks up whether `character` already has a recorded arm assignment,
+ * across a supplied assignment history — mirrors `learner-state`'s
+ * `priorEvents` pattern (a caller-supplied full history, not internal
+ * state). Needed by `exposure-engine`'s "existing assignment is honored"
+ * requirement: an assignment must never be re-rolled once made. Returns
+ * the most recently assigned match if more than one somehow exists
+ * (should not happen in practice — assignment is meant to run once per
+ * character — but "most recent wins" is a safe, deterministic tie-break).
+ */
+export function findAssignmentForCharacter(
+  assignments: readonly ArmAssignment[],
+  character: string,
+): ArmAssignment | undefined {
+  let found: ArmAssignment | undefined;
+  for (const assignment of assignments) {
+    if (assignment.character !== character) continue;
+    if (!found || assignment.assignedAt > found.assignedAt) {
+      found = assignment;
+    }
+  }
+  return found;
+}
+
 export interface AssignmentDeps {
   now?: () => string;
   random?: () => number;

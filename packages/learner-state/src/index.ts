@@ -10,7 +10,11 @@ export type { AppendResult } from "./event-log.js";
 export { EventLog } from "./event-log.js";
 
 export type { MasteryProjectionConfig } from "./mastery-projection.js";
-export { computeMasteryStates, DEFAULT_MASTERY_CONFIG } from "./mastery-projection.js";
+export {
+  computeMasteryStates,
+  DEFAULT_MASTERY_CONFIG,
+  DEFAULT_RECOGNITION_MODALITIES,
+} from "./mastery-projection.js";
 
 export { computeKnownSet } from "./known-set-projection.js";
 

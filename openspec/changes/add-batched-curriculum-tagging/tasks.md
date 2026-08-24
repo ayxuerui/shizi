@@ -1,11 +1,20 @@
 ## 1. Curriculum: batch composition
 
-- [ ] 1.1 Add `batchSize` (default 5) and `batchLookahead` (default 4) to `CurriculumConfig`/`DEFAULT_CURRICULUM_CONFIG` in `packages/curriculum/src/types.ts`
-- [ ] 1.2 Implement `composeBatch(pool, state, confusabilityIndex, config)` in a new `packages/curriculum/src/batch.ts`, calling `selectNextCharacter` repeatedly and carrying provisional state forward (each pick added to a simulated known-set and appended to `recentlyIntroduced`) — the loop currently inlined at `infra/sync-service/scripts/publish-config.ts:57-72`
-- [ ] 1.3 Return a short batch rather than violating spacing when no eligible candidate remains, surfacing why (mirroring `SelectionResult`'s `none-eligible` reason discipline)
-- [ ] 1.4 Implement `composeBatchPlan(...)` returning `batchLookahead` consecutive batches, carrying provisional state across batch boundaries
-- [ ] 1.5 Export both from `packages/curriculum/src/index.ts`
-- [ ] 1.6 Tests in `batch.test.ts`: batch filled from Phase A in authored order; batch spanning the Phase A boundary; no two members of one batch confusable with each other; short batch instead of a spacing violation; reconfigured `batchSize` honoured; plan excludes characters placed in earlier batches; determinism across two identical runs
+**Implemented — this section only.** Sections 2-9 below (the `CharacterTag` record, the parent
+tag-review gate, the sync-service `/tags` stream, and the published-batch-plan/review-screen UI)
+are **NOT implemented**. They're a separate concern — parent hand-tagging workflow and content
+review — from what actually motivated picking this section up: `composeBatch` was the one piece of
+this change genuinely needed to drive a real learn → assess → daily-memory play loop for the
+learner (see `session/activity-selector.ts` in `apps/assessment`, added outside this change's
+original scope to close that loop). Building the full tag-review gate was out of scope for that
+goal and would have meaningfully expanded it, so it was deliberately deferred rather than half-built.
+
+- [x] 1.1 Add `batchSize` (default 5) and `batchLookahead` (default 4) to `CurriculumConfig`/`DEFAULT_CURRICULUM_CONFIG` in `packages/curriculum/src/types.ts`
+- [x] 1.2 Implement `composeBatch(pool, state, confusabilityIndex, config)` in a new `packages/curriculum/src/batch.ts`, calling `selectNextCharacter` repeatedly and carrying provisional state forward (each pick added to a simulated known-set and appended to `recentlyIntroduced`) — the loop currently inlined at `infra/sync-service/scripts/publish-config.ts:57-72`. NOTE: `publish-config.ts`'s own inlined loop was left as-is, not migrated to call `composeBatch` — see this section's task 6.1 in the (unimplemented) Section 6 for that follow-up work.
+- [x] 1.3 Return a short batch rather than violating spacing when no eligible candidate remains, surfacing why (mirroring `SelectionResult`'s `none-eligible` reason discipline)
+- [x] 1.4 Implement `composeBatchPlan(...)` returning `batchLookahead` consecutive batches, carrying provisional state across batch boundaries
+- [x] 1.5 Export both from `packages/curriculum/src/index.ts`
+- [x] 1.6 Tests in `batch.test.ts`: batch filled from Phase A in authored order; batch spanning the Phase A boundary; no two members of one batch confusable with each other; short batch instead of a spacing violation; reconfigured `batchSize` honoured; plan excludes characters placed in earlier batches; determinism across two identical runs — 8 tests, all passing.
 
 ## 2. Character data: the tag record
 

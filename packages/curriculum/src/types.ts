@@ -45,14 +45,36 @@ export interface CurriculumConfig {
   /** How many of the most-recently-introduced characters the hard confusability constraint protects. */
   recentWindowSize: number;
   weights: ScoringWeights;
+  /** How many characters make up one batch — defaults to `recentWindowSize`
+   * (5) precisely so the existing spacing constraint alone guarantees no
+   * two batch members are confusable with each other; see
+   * `add-batched-curriculum-tagging` design.md's "Batch size defaults to 5". */
+  batchSize: number;
+  /** How many consecutive batches `composeBatchPlan` composes ahead. */
+  batchLookahead: number;
 }
 
 export const DEFAULT_CURRICULUM_CONFIG: CurriculumConfig = {
   recentWindowSize: 5,
   weights: DEFAULT_SCORING_WEIGHTS,
+  batchSize: 5,
+  batchLookahead: 4,
 };
 
 export type SelectionResult =
   | { status: "phase-a"; character: string }
   | { status: "phase-b"; character: string; scored: ScoredCandidate }
   | { status: "none-eligible"; reason: string };
+
+/**
+ * One batch's composition. `short` is true when fewer than `batchSize`
+ * characters could be composed — per `add-batched-curriculum-tagging`
+ * spec: a short batch is returned rather than violating the spacing
+ * constraint or fabricating a candidate.
+ */
+export interface ComposedBatch {
+  characters: readonly string[];
+  short: boolean;
+  /** Populated only when `short` is true — why composition stopped early. */
+  reason?: string;
+}
