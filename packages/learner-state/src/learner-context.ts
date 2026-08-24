@@ -8,7 +8,7 @@ import type { LearnerEvent, MasteryState } from "./types.js";
 
 /**
  * The outward-facing read model other layers consume to answer "what does
- * this learner know?" — per the `learner-state` spec's "Progress context is
+ * this learner know?" — per the `learner-state` spec's "Learner context is
  * the outward contract for other layers" requirement. Consumers obtain their
  * progress facts from here rather than re-deriving mastery, known-set
  * membership, or recency from raw events.
@@ -51,7 +51,7 @@ export interface LearnerContext {
 }
 
 /**
- * Projects the full progress context out of the event log in one pass.
+ * Projects the full learner context out of the event log in one pass.
  * Pure function of `(events, config)` — same log and config, same facts —
  * so it works offline with no network and no clock access.
  */

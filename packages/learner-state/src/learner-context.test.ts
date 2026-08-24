@@ -36,7 +36,7 @@ function snapshot(context: LearnerContext) {
   };
 }
 
-describe("deriveLearnerContext (learner-state spec: 'Progress context is the outward contract for other layers')", () => {
+describe("deriveLearnerContext (learner-state spec: 'Learner context is the outward contract for other layers')", () => {
   it("scenario: an introduction-only unit reports as presented, with no mastery state derived from that presentation ('Presented but not yet measured')", () => {
     const context = deriveLearnerContext([
       event({ character: "山", modality: "expose-listen", timestamp: "2026-08-17T09:00:00.000Z" }),
