@@ -1,8 +1,22 @@
 import type { LearnerEvent, MasteryState } from "./types.js";
 
+/**
+ * Modalities whose outcomes count as evidence of character *recognition*.
+ * Owned here (not by whichever engine happens to write the event) so the
+ * exclusion is structural — see `add-tracing-modality-arm` design.md's
+ * "Exposure events use non-recognition modality identifiers" decision.
+ * `hear-tap` is the assessment's existing (and, until this change, only)
+ * modality; `expose-listen`/`expose-trace` are teaching interactions, not
+ * recognition checks, and must never promote a character to `known`.
+ */
+export const DEFAULT_RECOGNITION_MODALITIES: ReadonlySet<string> = new Set(["hear-tap"]);
+
 export interface MasteryProjectionConfig {
   /** Below this latency, a correct response counts as a genuine (non-guess) hit. */
   guessDetectionThresholdMs: number;
+  /** Only events whose `modality` is in this set count toward the
+   * consecutive-correct/miss streak. Defaults to `DEFAULT_RECOGNITION_MODALITIES`. */
+  recognitionModalities?: ReadonlySet<string>;
 }
 
 export const DEFAULT_MASTERY_CONFIG: MasteryProjectionConfig = {
@@ -11,6 +25,7 @@ export const DEFAULT_MASTERY_CONFIG: MasteryProjectionConfig = {
   // hard-coding it, since design.md explicitly expects it to be tuned
   // after observing real sessions.
   guessDetectionThresholdMs: 2000,
+  recognitionModalities: DEFAULT_RECOGNITION_MODALITIES,
 };
 
 /**
@@ -31,8 +46,11 @@ export function computeMasteryStates(
   events: readonly LearnerEvent[],
   config: MasteryProjectionConfig = DEFAULT_MASTERY_CONFIG,
 ): Map<string, MasteryState> {
+  const recognitionModalities = config.recognitionModalities ?? DEFAULT_RECOGNITION_MODALITIES;
+  const recognitionEvents = events.filter((event) => recognitionModalities.has(event.modality));
+
   const byCharacter = new Map<string, LearnerEvent[]>();
-  for (const event of events) {
+  for (const event of recognitionEvents) {
     if (!byCharacter.has(event.character)) {
       byCharacter.set(event.character, []);
     }

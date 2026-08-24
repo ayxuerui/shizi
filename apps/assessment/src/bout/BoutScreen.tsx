@@ -16,7 +16,16 @@ export interface BoutScreenProps {
    * `<BoutScreen>` with no props keeps working unchanged. */
   pool?: CandidatePool;
   config?: AssessmentSessionConfig;
+  /** Called once the parent has rated (or skipped rating) and the bout
+   * has fully settled (`phase === "done"`). Optional — omitted by
+   * existing tests/usages, which just leave the closing beat on screen
+   * indefinitely, exactly as before this prop existed. */
+  onDone?: () => void;
 }
+
+/** Mirrors ExposureScreen/MemoryScreen's closing hold, for a consistent
+ * pause before the practice router advances to the next activity. */
+const DONE_ADVANCE_DELAY_MS = 1500;
 
 /**
  * Thin composition: `NarrativeStage` is always mounted (the beat/progress
@@ -24,7 +33,7 @@ export interface BoutScreenProps {
  * takes over once the session completes. All the actual state lives in
  * `useAssessmentSession` — this component just maps `BoutState` to markup.
  */
-export function BoutScreen({ pool: poolProp, config }: BoutScreenProps = {}) {
+export function BoutScreen({ pool: poolProp, config, onDone }: BoutScreenProps = {}) {
   const sessionId = useMemo(() => crypto.randomUUID(), []);
   const pool = useMemo(() => poolProp ?? loadCandidatePool(), [poolProp]);
   const { state, submitResponse, rate, skipRating, timing } = useAssessmentSession({
@@ -33,6 +42,12 @@ export function BoutScreen({ pool: poolProp, config }: BoutScreenProps = {}) {
     ...(config ? { config } : {}),
   });
   const { play } = useInteractionSound();
+
+  useEffect(() => {
+    if (state.phase !== "done" || !onDone) return undefined;
+    const timeout = setTimeout(onDone, DONE_ADVANCE_DELAY_MS);
+    return () => clearTimeout(timeout);
+  }, [state.phase, onDone]);
 
   const lastCueRef = useRef<typeof state.cue>(null);
   useEffect(() => {

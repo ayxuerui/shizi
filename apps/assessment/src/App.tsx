@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { AudioUnlockGate } from "./audio/AudioUnlockGate.js";
-import { BoutScreen } from "./bout/BoutScreen.js";
 import { DiagnosticsScreen } from "./diagnostics/DiagnosticsScreen.js";
 import { clearDiagnosticsHash, isDiagnosticsRequested } from "./diagnostics/entry.js";
+import { PracticeRouter } from "./session/PracticeRouter.js";
 import { loadPublishedConfig, type PublishedConfigResult } from "./session/published-config.js";
 
 /**
@@ -57,7 +57,7 @@ export function App() {
 
   return (
     <AudioUnlockGate onDiagnosticsRequest={() => setDiagnosticsOpen(true)}>
-      <BoutScreen pool={published.pool} config={published.config} />
+      <PracticeRouter pool={published.pool} assessmentConfig={published.config} />
     </AudioUnlockGate>
   );
 }

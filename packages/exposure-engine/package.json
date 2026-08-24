@@ -1,5 +1,5 @@
 {
-  "name": "@shizi/assessment-engine",
+  "name": "@shizi/exposure-engine",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@shizi/adaptivity": "*",
     "@shizi/character-data": "*",
     "@shizi/curriculum": "*",
     "@shizi/learner-state": "*"
