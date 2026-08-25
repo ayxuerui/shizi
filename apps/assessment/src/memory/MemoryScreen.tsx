@@ -1,6 +1,6 @@
-import { useEffect } from "react";
 import type { CandidatePool } from "@shizi/character-data";
 import { COPY } from "../copy.js";
+import { ContinueTap } from "../closing/ContinueTap.js";
 import { NarrativeStage } from "../narrative/NarrativeStage.js";
 import { WukongPlaceholder } from "../narrative/WukongPlaceholder.js";
 import { ProbePanel } from "../probe/ProbePanel.js";
@@ -13,8 +13,6 @@ export interface MemoryScreenProps {
   characters: readonly string[];
   onDone: () => void;
 }
-
-const CLOSING_HOLD_MS = 1500;
 
 /**
  * The daily-memory activity screen: a short spaced-repetition review
@@ -32,12 +30,6 @@ export function MemoryScreen({ pool, characters, onDone }: MemoryScreenProps) {
   });
 
   const done = state.phase === "done";
-
-  useEffect(() => {
-    if (!done) return undefined;
-    const timeout = setTimeout(onDone, CLOSING_HOLD_MS);
-    return () => clearTimeout(timeout);
-  }, [done, onDone]);
 
   const answeredCount = characters.length > 0 ? characters.indexOf(state.probe?.character ?? "") : 0;
 
@@ -58,6 +50,7 @@ export function MemoryScreen({ pool, characters, onDone }: MemoryScreenProps) {
           <WukongPlaceholder />
           <h1>{COPY.closing.title}</h1>
           <p>{COPY.closing.subtitle}</p>
+          <ContinueTap onContinue={onDone} />
         </div>
       )}
     </div>

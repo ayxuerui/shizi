@@ -53,6 +53,11 @@ describe("MemoryScreen (daily-memory review, reusing ProbePanel/assessment's no-
     assertNoScoreLikeText();
     tap(screen.getByRole("button", { name: "水" }));
 
+    // The closing beat holds until the deliberate continue tap — no timer.
+    await waitFor(() => expect(screen.getByRole("button", { name: "再玩一个" })).toBeInTheDocument(), { timeout: 3000 });
+    expect(onDone).not.toHaveBeenCalled();
+    tap(screen.getByRole("button", { name: "再玩一个" }));
+
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1), { timeout: 3000 });
     assertNoScoreLikeText();
   });

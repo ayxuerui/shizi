@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import type { AssessmentSessionConfig } from "@shizi/assessment-engine";
 import type { CandidatePool } from "@shizi/character-data";
 import { ClosingBeat } from "../closing/ClosingBeat.js";
+import { ContinueTap } from "../closing/ContinueTap.js";
 import { useInteractionSound } from "../feedback/use-interaction-sound.js";
 import { NarrativeStage } from "../narrative/NarrativeStage.js";
 import { ProbePanel } from "../probe/ProbePanel.js";
@@ -23,10 +24,6 @@ export interface BoutScreenProps {
   onDone?: () => void;
 }
 
-/** Mirrors ExposureScreen/MemoryScreen's closing hold, for a consistent
- * pause before the practice router advances to the next activity. */
-const DONE_ADVANCE_DELAY_MS = 1500;
-
 /**
  * Thin composition: `NarrativeStage` is always mounted (the beat/progress
  * display); `ProbePanel` renders during probing/resolving; `ClosingBeat`
@@ -42,12 +39,6 @@ export function BoutScreen({ pool: poolProp, config, onDone }: BoutScreenProps =
     ...(config ? { config } : {}),
   });
   const { play } = useInteractionSound();
-
-  useEffect(() => {
-    if (state.phase !== "done" || !onDone) return undefined;
-    const timeout = setTimeout(onDone, DONE_ADVANCE_DELAY_MS);
-    return () => clearTimeout(timeout);
-  }, [state.phase, onDone]);
 
   const lastCueRef = useRef<typeof state.cue>(null);
   useEffect(() => {
@@ -84,6 +75,7 @@ export function BoutScreen({ pool: poolProp, config, onDone }: BoutScreenProps =
       {(state.phase === "closing" || state.phase === "done") && (
         <ClosingBeat ratingPhase={state.ratingPhase} onRate={rate} onSkipRating={skipRating} />
       )}
+      {state.phase === "done" && onDone && <ContinueTap onContinue={onDone} />}
     </div>
   );
 }
