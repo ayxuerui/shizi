@@ -76,6 +76,11 @@ describe("ExposureScreen (exposure spec: 'No grading or failure state', 'Arm-bou
     assertNoScoreLikeText();
     tap(screen.getByRole("button", { name: "知道了，继续" }));
 
+    // The closing beat holds until the deliberate continue tap — no timer.
+    await waitFor(() => expect(screen.getByRole("button", { name: COPY.closing.continueTap })).toBeInTheDocument(), { timeout: 3000 });
+    expect(onDone).not.toHaveBeenCalled();
+    tap(screen.getByRole("button", { name: COPY.closing.continueTap }));
+
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1), { timeout: 3000 });
     assertNoScoreLikeText();
   });

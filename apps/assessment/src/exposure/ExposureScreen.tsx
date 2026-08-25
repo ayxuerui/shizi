@@ -1,7 +1,7 @@
-import { useEffect } from "react";
 import type { SessionDeps } from "@shizi/exposure-engine";
 import type { CandidatePool } from "@shizi/character-data";
 import { COPY } from "../copy.js";
+import { ContinueTap } from "../closing/ContinueTap.js";
 import { NarrativeStage } from "../narrative/NarrativeStage.js";
 import { WukongPlaceholder } from "../narrative/WukongPlaceholder.js";
 import { ListenExposure } from "./ListenExposure.js";
@@ -19,11 +19,6 @@ export interface ExposureScreenProps {
    * `config` prop. */
   deps?: Partial<SessionDeps>;
 }
-
-/** How long the closing beat stays on screen before the practice router
- * moves on to the next activity — long enough to register as a real
- * beat, short enough to keep the play loop moving. */
-const CLOSING_HOLD_MS = 1500;
 
 /**
  * The `learn` activity screen (`add-tracing-modality-arm`'s "Exposure is
@@ -45,12 +40,6 @@ export function ExposureScreen({ pool, characters, onDone, deps }: ExposureScree
 
   const done = state.phase === "done";
 
-  useEffect(() => {
-    if (!done) return undefined;
-    const timeout = setTimeout(onDone, CLOSING_HOLD_MS);
-    return () => clearTimeout(timeout);
-  }, [done, onDone]);
-
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1.5rem" }}>
       <NarrativeStage beatIndex={state.completedCount} complete={done} />
@@ -65,6 +54,7 @@ export function ExposureScreen({ pool, characters, onDone, deps }: ExposureScree
           <WukongPlaceholder />
           <h1>{COPY.closing.title}</h1>
           <p>{COPY.closing.subtitle}</p>
+          <ContinueTap onContinue={onDone} />
           {/* No parent-rating prompt here — `ParentRatingPrompt` is scoped
            * to the `assessment` capability's spec, not exposure. */}
         </div>

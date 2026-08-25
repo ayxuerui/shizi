@@ -35,6 +35,11 @@ export const COPY = {
   closing: {
     title: "悟空到家了！",
     subtitle: "今天玩得真开心",
+    // The deliberate continue tap at the closing beat — the next activity
+    // starts only when the child taps this, never on a timer, so a bout
+    // ends as an acknowledged stopping point rather than flowing onward
+    // unnoticed.
+    continueTap: "再玩一个",
   },
   parentRating: {
     prompt: "今天玩得怎么样？",

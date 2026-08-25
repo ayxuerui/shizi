@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { DEFAULT_ASSESSMENT_SESSION_CONFIG } from "@shizi/assessment-engine";
 import { __resetDBForTests } from "../offline/db.js";
@@ -109,6 +109,26 @@ describe("BoutScreen (assessment spec: 'No visible scoring or failure state', 'N
 
     assertNoScoreLikeText();
     expect(screen.queryByRole("button", { name: "跳过" })).not.toBeInTheDocument();
+  });
+
+  it("advances only on the deliberate continue tap after the rating settles — never on a timer", async () => {
+    const onDone = vi.fn();
+    render(
+      <BoutScreen config={{ ...DEFAULT_ASSESSMENT_SESSION_CONFIG, maxItems: 1 }} onDone={onDone} />,
+    );
+    const options = await screen.findAllByRole("button", { name: /^[一-鿿]$/ });
+    tap(options[0]!);
+
+    await screen.findByText(/悟空到家了/, {}, { timeout: 3000 });
+    tap(await screen.findByRole("button", { name: "跳过" }));
+
+    // Rating settled — the bout still holds until 再玩一个 is tapped.
+    expect(screen.queryByRole("button", { name: COPY.closing.continueTap })).toBeInTheDocument();
+    expect(onDone).not.toHaveBeenCalled();
+
+    tap(screen.getByRole("button", { name: COPY.closing.continueTap }));
+    await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
+    assertNoScoreLikeText();
   });
 
   it("persists the tapped parent rating to the offline queue, linked to this bout's session (adaptivity-instrumentation spec: 'Parent one-tap session rating')", async () => {

@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-08-19T17:00:23.899Z",
+  "generatedAt": "2026-08-25T04:01:10.818Z",
   "source": "LXGW WenKai (Regular weight) — https://github.com/lxgw/LxgwWenKai, release v1.522",
   "license": "SIL Open Font License 1.1 — see OFL.txt alongside this file",
   "characterCount": 305,
-  "outputBytes": 60256,
+  "outputBytes": 60280,
   "modification": "Subsetted (glyph closure only, via harfbuzz/subset-font) to this project's candidate pool + identity set + UI copy (src/copy.ts) + ASCII/punctuation. No glyph designs altered — see this script for the exact character-set derivation."
 }
