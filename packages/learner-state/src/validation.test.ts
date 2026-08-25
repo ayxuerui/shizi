@@ -8,7 +8,8 @@ function validEvent(overrides: Partial<LearnerEvent> = {}): LearnerEvent {
     timestamp: "2026-08-17T10:00:00.000Z",
     sessionId: "session-1",
     character: "山",
-    modality: "hear-tap",
+    module: "assess",
+    activity: "hear-tap",
     outcome: "correct",
     latencyMs: 800,
     positionInSession: 0,
@@ -61,5 +62,16 @@ describe("validateEvent (learner-state spec: 'Event schema captures interaction 
   it("rejects timeOfDay outside 0-23", () => {
     expect(validateEvent(validEvent({ timeOfDay: 24 })).valid).toBe(false);
     expect(validateEvent(validEvent({ timeOfDay: -1 })).valid).toBe(false);
+  });
+
+  it("rejects an invalid module value", () => {
+    expect(validateEvent(validEvent({ module: "testing" as never })).valid).toBe(false);
+  });
+
+  it("rejects a pre-migration event still carrying the retired modality field (rename-event-modality-to-activity)", () => {
+    const legacy = { ...validEvent(), modality: "hear-tap" } as unknown as Record<string, unknown>;
+    const result = validateEvent(legacy);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes("retired field"))).toBe(true);
   });
 });

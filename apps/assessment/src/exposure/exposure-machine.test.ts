@@ -3,7 +3,7 @@ import { exposureBoutReducer, INITIAL_EXPOSURE_BOUT_STATE } from "./exposure-mac
 
 describe("exposureBoutReducer", () => {
   it("ITEM_READY moves to presenting with the item attached", () => {
-    const item = { character: "山", arm: "expose-listen" };
+    const item = { character: "山", arm: "listen" };
     const state = exposureBoutReducer(INITIAL_EXPOSURE_BOUT_STATE, { type: "ITEM_READY", item });
     expect(state).toEqual({ phase: "presenting", item, completedCount: 0 });
   });
@@ -11,7 +11,7 @@ describe("exposureBoutReducer", () => {
   it("ITEM_COMPLETED clears the item, returns to loading, and increments the count", () => {
     const presenting = exposureBoutReducer(INITIAL_EXPOSURE_BOUT_STATE, {
       type: "ITEM_READY",
-      item: { character: "山", arm: "expose-listen" },
+      item: { character: "山", arm: "listen" },
     });
     const state = exposureBoutReducer(presenting, { type: "ITEM_COMPLETED" });
     expect(state).toEqual({ phase: "loading", item: null, completedCount: 1 });

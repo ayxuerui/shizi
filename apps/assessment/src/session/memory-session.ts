@@ -11,7 +11,8 @@ import { EventLog, type LearnerEvent, type Outcome } from "@shizi/learner-state"
  * demotes the character to `shaky` through the exact same mastery
  * projection assessment already uses — the intended signal, not a
  * side-effect to work around. */
-const MODALITY = "hear-tap";
+const MODULE = "review";
+const ACTIVITY = "hear-tap";
 
 export interface MemoryProbeItem {
   character: string;
@@ -157,7 +158,8 @@ export class MemorySession {
       timestamp: now,
       sessionId: this.sessionId,
       character: input.character,
-      modality: MODALITY,
+      module: MODULE,
+      activity: ACTIVITY,
       outcome: input.outcome,
       latencyMs: input.latencyMs,
       positionInSession: this.cursor,

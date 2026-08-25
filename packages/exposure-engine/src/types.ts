@@ -5,13 +5,13 @@ import { DEFAULT_CURRICULUM_CONFIG } from "@shizi/curriculum";
 import type { LearnerEvent } from "@shizi/learner-state";
 
 /**
- * This change's two teaching modalities — see `exposure` spec's "Arm-
- * bound exposure delivery" requirement. Distinct identifiers from
- * `hear-tap` (the assessment's recognition modality) so `learner-state`'s
- * recognition-modality filter can structurally exclude them from the
- * known/shaky projection — see `mastery-projection.ts`.
+ * The exposure module's two teaching activities — see `exposure` spec's
+ * "Arm-bound exposure delivery" requirement. Neither is in
+ * `learner-state`'s recognition-activity set (`hear-tap` only), so the
+ * known/shaky projection structurally excludes them — see
+ * `mastery-projection.ts`.
  */
-export const EXPOSURE_ARMS: readonly Arm[] = ["expose-listen", "expose-trace"];
+export const EXPOSURE_ARMS: readonly Arm[] = ["listen", "trace"];
 
 export interface ExposureItem {
   character: string;

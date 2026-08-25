@@ -18,7 +18,7 @@ function event(overrides: Partial<LearnerEvent> = {}): LearnerEvent {
     timestamp: "2026-08-20T10:00:00.000Z",
     sessionId: "s0",
     character: "山",
-    modality: "hear-tap",
+    module: "assess", activity: "hear-tap",
     outcome: "correct",
     latencyMs: 500,
     positionInSession: 0,
@@ -46,7 +46,7 @@ describe("decideActivity", () => {
 
   it("once the active batch's characters have all been exposed but aren't yet known, moves to 'assess'", () => {
     const events: LearnerEvent[] = PHASE_A_SEQUENCE.slice(0, 5).map((character) =>
-      event({ character, modality: "expose-listen", timestamp: "2026-08-23T09:00:00.000Z" }),
+      event({ character, activity: "listen", timestamp: "2026-08-23T09:00:00.000Z" }),
     );
     const decision = decideActivity({ pool, events, today: "2026-08-23", lastMemoryBoutDate: null });
     expect(decision).toEqual({ type: "assess" });
@@ -65,7 +65,7 @@ describe("decideActivity", () => {
     const events: LearnerEvent[] = [
       ...knownEvents(PHASE_A_SEQUENCE[0]!, "2026-08-01T09:00:00.000Z"), // known, stale — due
       ...PHASE_A_SEQUENCE.slice(1, 5).map((character) =>
-        event({ character, modality: "expose-listen", timestamp: "2026-08-23T09:00:00.000Z" }),
+        event({ character, activity: "listen", timestamp: "2026-08-23T09:00:00.000Z" }),
       ),
     ];
     const decision = decideActivity({ pool, events, today: "2026-08-23", lastMemoryBoutDate: null });
