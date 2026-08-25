@@ -4,17 +4,17 @@ The project has grown a working learn → assess → review play loop, but the l
 the learner does next* ended up inside the learner-facing app, with no contract around it.
 `apps/assessment/src/session/activity-selector.ts` reaches directly into `@shizi/curriculum`'s
 `composeBatch`, recomputes the known-set itself, derives its own "recently introduced" ordering from
-raw events, and picks an activity — all in one app-local file that no spec describes. The app is
+raw events, and picks a module — all in one app-local file that no spec describes. The app is
 simultaneously the orchestrator, the renderer, and the place progression logic happens to live.
 
-That works for one activity set and one learner, and it will not survive the next addition. Every new
-activity (词 practice, 句 reading, the printed reader) has to reach into curriculum internals the same
+That works for one module set and one learner, and it will not survive the next addition. Every new
+module (词 practice, 句 reading, the printed reader) has to reach into curriculum internals the same
 ad-hoc way, and every new progression signal has to be re-derived at each call site. There is no
 place to state "this is how the next batch of goals is decided" or "this is what the app is allowed
 to know about progress," so both answers get re-invented per feature.
 
 Naming the three layers — **curriculum** (what to learn next), **progression** (what the learner
-knows), **learning** (what activity to run, and reporting back) — and giving each an explicit
+knows), **learning** (what module to run, and reporting back) — and giving each an explicit
 contract makes those answers single-sourced. It also lets the character sequence be decided and
 reviewed *ahead of time* rather than computed on the child's device mid-session.
 
@@ -22,7 +22,7 @@ reviewed *ahead of time* rather than computed on the child's device mid-session.
 
 - **Introduce a `learning-orchestration` capability** — the Learning Layer, as its own package rather
   than app-local code. It reads a learner context from the progression layer, requests the next
-  batch of learning goals from the curriculum layer, selects which activity to deliver, and reports
+  batch of learning goals from the curriculum layer, selects which module to deliver, and reports
   every outcome back. The app becomes a renderer that consumes its decisions, not the thing making
   them.
 - **Define the three layer contracts explicitly**, each owned by the layer that produces it: the
@@ -39,16 +39,16 @@ reviewed *ahead of time* rather than computed on the child's device mid-session.
   specifically characters — so when `add-tiered-content-progression` adds the 词 and 句 tiers, it fills
   in behind the same curriculum-layer interface instead of reshaping the layers. This change itself
   ships the character tier only; no 词/句 content is created here.
-- **Retroactively specify the review activity's *delivery*** as `memory-review`. This activity already
+- **Retroactively specify the review module's *delivery*** as `memory-review`. This module already
   exists in working code (`session/memory-session.ts`, `memory/MemoryScreen.tsx`) with **no spec
   coverage at all** — it was built to close the learn → assess → review cycle. The learning layer
-  cannot state which activities it selects among without this one being specified, so this change
+  cannot state which modules it selects among without this one being specified, so this change
   closes that hole rather than leaving a dangling reference. This is documenting built behavior, not
   new scope.
 - **BREAKING to an accepted plan — this supersedes `add-memory-curve-review`'s delivery approach.**
   That change (proposed and merged, not yet implemented) states review folds into existing assessment
-  bouts' easy-item dilution slots: *"No new activity, no new screen."* A separate review bout has
-  since been built and verified on the dev deployment, so this change adopts the separate-activity
+  bouts' easy-item dilution slots: *"No new module, no new screen."* A separate review bout has
+  since been built and verified on the dev deployment, so this change adopts the separate-module
   shape instead and records the deviation rather than leaving a merged proposal and shipped code
   silently contradicting each other. What is superseded is **only** the delivery mechanism; see the
   ownership split below.
@@ -69,9 +69,9 @@ reviewed *ahead of time* rather than computed on the child's device mid-session.
 ## Capabilities
 
 ### New Capabilities
-- `learning-orchestration`: The Learning Layer. Which activity the learner does next and why, the
+- `learning-orchestration`: The Learning Layer. Which module the learner does next and why, the
   contract it uses to obtain a learner context and a learning-goal batch, the requirement that it
-  never reimplements selection or mastery logic itself, and the obligation to report every activity
+  never reimplements selection or mastery logic itself, and the obligation to report every module
   outcome back to the progression layer.
 - `memory-review`: Review-bout *delivery* — consuming a supplied due queue without redefining
   due-ness, bout bounding, at most one bout per day, that a review response feeds the same recognition
@@ -94,11 +94,11 @@ reviewed *ahead of time* rather than computed on the child's device mid-session.
 
 - **Packages**: new `learning-orchestration` package; `@shizi/curriculum` gains the batch/context
   contract and loses nothing; `@shizi/learner-state` gains the learner-context read model.
-  `@shizi/exposure-engine` and `@shizi/assessment-engine` become activity implementations invoked
+  `@shizi/exposure-engine` and `@shizi/assessment-engine` become module implementations invoked
   *by* the learning layer rather than composed directly by the app.
 - **App**: `apps/assessment` — `session/activity-selector.ts` and `session/memory-session.ts` move out
   of the app; `session/PracticeRouter.tsx` shrinks to rendering whatever the learning layer decides.
-  Activity screens themselves (`BoutScreen`, `ExposureScreen`, `MemoryScreen`) are unaffected.
+  module screens themselves (`BoutScreen`, `ExposureScreen`, `MemoryScreen`) are unaffected.
 - **Infra**: `infra/sync-service/scripts/publish-config.ts` publishes the pre-generated batch plan;
   its currently-inlined greedy look-ahead loop is replaced by the curriculum layer's own batch
   composition.
@@ -113,8 +113,8 @@ reviewed *ahead of time* rather than computed on the child's device mid-session.
   change then implements 词/句 behind this change's contracts. Landing it *after* tiered-progression
   would mean designing the layers against a type surface that change is still moving.
 - **`add-memory-curve-review` needs amending, not just noting**: its "Make review active inside
-  existing bouts / no new activity, no new screen" bullet and its `assessment` dilution-slot delta are
-  superseded by this change's separate-activity shape. Its `review-scheduling` capability is untouched
-  and still needed. That change should be updated to consume the learning layer's review activity
+  existing bouts / no new module, no new screen" bullet and its `assessment` dilution-slot delta are
+  superseded by this change's separate-module shape. Its `review-scheduling` capability is untouched
+  and still needed. That change should be updated to consume the learning layer's review module
   rather than the dilution slots — its own sequencing note (it depends on
   `add-tiered-content-progression`) means it has not started, so this costs no rework.

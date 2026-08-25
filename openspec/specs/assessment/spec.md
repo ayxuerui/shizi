@@ -44,11 +44,11 @@ The assessment SHALL mix informative (frontier-adjacent) probes with easy, guara
 - **THEN** it SHALL include easy items at approximately the configured ratio relative to informative probes, not consist solely of maximally-informative (and therefore harder) items
 
 ### Requirement: No visible scoring or failure state
-The assessment SHALL NOT display a numeric score, a pass/fail result, a count of mistakes, or any negative visual/audio feedback for an incorrect response. An incorrect response SHALL be followed only by a neutral or gentle redirect, and the activity SHALL continue.
+The assessment SHALL NOT display a numeric score, a pass/fail result, a count of mistakes, or any negative visual/audio feedback for an incorrect response. An incorrect response SHALL be followed only by a neutral or gentle redirect, and the bout SHALL continue.
 
 #### Scenario: Incorrect response
 - **WHEN** a learner taps an incorrect option
-- **THEN** the system SHALL respond with a neutral/gentle cue (no error sound, no red indicator, no score change) and SHALL allow the activity to continue
+- **THEN** the system SHALL respond with a neutral/gentle cue (no error sound, no red indicator, no score change) and SHALL allow the bout to continue
 
 #### Scenario: No cumulative score shown
 - **WHEN** a learner completes any portion of a session
