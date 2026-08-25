@@ -17,7 +17,7 @@ every session run in the meantime.
 
 ## What Changes
 
-- **New `exposure` capability**: the first *teaching* activity in the project. Where the assessment measures what
+- **New `exposure` capability**: the first *teaching* module in the project. Where the assessment measures what
   the learner already recognizes, exposure introduces a not-yet-known character selected by the existing
   `curriculum` capability. Arm assignment routes *how* that introduction happens.
 - **Two exposure arms**, so the matched-pair randomization has something to randomize between:
@@ -70,7 +70,7 @@ every session run in the meantime.
   introduction, exposure event construction. Mirrors `packages/assessment-engine`'s shape and its
   injected-dependency determinism discipline (`SessionDeps`).
 - **New UI** `apps/assessment/src/exposure/` — the exposure screen and the two arm renderers. (The app directory
-  keeps its `assessment` name despite now hosting a second activity; renaming the single PWA is churn without
+  keeps its `assessment` name despite now hosting a second module; renaming the single PWA is churn without
   benefit and is out of scope.)
 - **Modified**: `packages/adaptivity` (arm value set, assignment lookup by character), `packages/assessment-engine`
   (`arms` default; removal of probe-time assignment), `packages/learner-state` (recognition-modality filter in the

@@ -1,6 +1,6 @@
 ## Purpose
 
-Delivers a review bout: how already-due units are presented to the learner as an activity, bounded
+Delivers a review bout: how already-due units are presented to the learner as a module, bounded
 and paced. Deliberately owns *delivery only* — which units are due, and in what order, belongs
 entirely to the `review-scheduling` capability, so there is exactly one definition of due-ness in the
 system.
@@ -57,7 +57,7 @@ capability rather than read from the clock implicitly.
 
 ### Requirement: Review responses are recognition evidence
 A response to a review item SHALL be recorded as recognition evidence, contributing to the
-progression layer's mastery projection on the same terms as a measurement activity's response — so a
+progression layer's mastery projection on the same terms as a measurement module's response — so a
 missed review demotes a previously-mastered unit, and a fast correct review sustains it. It SHALL be
 recorded through the progression layer's own event history, not as a review-specific parallel record.
 
@@ -80,7 +80,7 @@ recorded through the progression layer's own event history, not as a review-spec
 A review bout SHALL NOT be labelled, styled, or narrated to the learner as review, remediation, or
 repetition, and SHALL NOT surface any scheduling artifact — no count of items due, no overdue or
 lapsed indicator, no streak, and no retention score. An individual review item SHALL be presented
-indistinguishably from the same item presented in any other activity.
+indistinguishably from the same item presented in any other module.
 
 #### Scenario: A review item's presentation
 - **WHEN** a unit drawn from the due queue is presented in a review bout

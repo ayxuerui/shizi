@@ -6,10 +6,10 @@ See proposal.md — Why. The design-relevant current state:
   `apps/assessment/src/session/activity-selector.ts` holds `decideActivity`,
   `deriveRecentlyIntroduced`, and `computeDueForMemory`; `session/PracticeRouter.tsx` loads events
   from IndexedDB, calls `decideActivity`, keeps the last-review date in `localStorage`, and remounts
-  an activity screen under a bumped `key` to advance. `session/memory-session.ts` holds a whole
-  activity engine inside the app. This works and was verified end to end against the dev deployment;
+  a module screen under a bumped `key` to advance. `session/memory-session.ts` holds a whole
+  module engine inside the app. This works and was verified end to end against the dev deployment;
   it is the thing being relocated, not replaced.
-- **Two activity engines are already packages**, with a consistent shape: a headless, injected-deps
+- **Two module engines are already packages**, with a consistent shape: a headless, injected-deps
   engine class (`@shizi/assessment-engine`'s `AssessmentSession`, `@shizi/exposure-engine`'s
   `ExposureSession`) plus a React hook in the app that owns lifecycle (`use-assessment-session.ts`,
   `use-exposure-session.ts`). `memory-session.ts` is the odd one out, being app-local.
@@ -40,12 +40,12 @@ See proposal.md — Why. The design-relevant current state:
 
 **Non-Goals:**
 
-- No change to any activity's own internals. `BoutScreen`, `ExposureScreen`, and the review bout's
+- No change to any module's own internals. `BoutScreen`, `ExposureScreen`, and the review bout's
   interaction stay as they are; only who decides to run them changes.
 - No event-schema change and no data migration. (`add-tiered-content-progression` is the change that
   breaks that schema.)
 - No runtime service, no network dependency on the learner-facing path.
-- Not building a general activity-plugin system. Three activity kinds do not justify a registry.
+- Not building a general module-plugin system. Three module kinds do not justify a registry.
 
 ## Decisions
 
@@ -53,7 +53,7 @@ See proposal.md — Why. The design-relevant current state:
 
 `packages/learning-orchestration` holds the decision logic as a pure, injected-deps module; the app
 keeps a small React adapter that renders whatever it decides. This mirrors the established
-engine/hook split the other two activity engines already use.
+engine/hook split the other two module engines already use.
 
 **Why not keep it in the app behind an interface:** the goal is that the *next* feature cannot reach
 around the contract. An app-local module has no dependency boundary — nothing stops a new screen
@@ -61,14 +61,14 @@ importing `composeBatch` directly, which is exactly how the current situation ar
 boundary makes the bypass visible in a dependency graph.
 
 **Why not put it in `@shizi/curriculum`:** curriculum answers "what should be learned next," which is
-deliberately independent of "what activity should run and when." Folding activity selection into
-curriculum would give it a reason to know about activity kinds, review scheduling, and daily cadence —
+deliberately independent of "what module should run and when." Folding module selection into
+curriculum would give it a reason to know about module kinds, review scheduling, and daily cadence —
 none of which belong to sequencing.
 
 ### 2. The layer returns a decision; the app still owns engine lifecycle
 
-`nextActivity(context, plan)` returns a decision value — an activity kind plus the inputs that
-activity needs — and the app instantiates the corresponding engine as it does today.
+`nextModule(context, plan)` returns a decision value — a module kind plus the inputs that
+module needs — and the app instantiates the corresponding engine as it does today.
 
 **Why not have the learning layer own the engines:** each engine's lifecycle is genuinely
 React-shaped in this app (refs guarding StrictMode double-invocation, `requestAnimationFrame` latency
@@ -76,7 +76,7 @@ origins, resolve-delay timers). Pulling that into a headless package would put R
 concerns inside a layer whose whole value is being pure and testable without rendering.
 
 **How the reporting requirement is still met:** the learning layer exposes an explicit
-`reportActivityOutcome` seam that each activity adapter calls on completion, and that call is what
+`reportModuleOutcome` seam that each module adapter calls on completion, and that call is what
 advances the layer's own state (frozen batch progress, review-completed-today). Per-event writes
 continue through the existing offline queue into `learner-state`, unchanged — the layer is *told* what
 happened rather than duplicating event persistence. Without this seam the layer would have to
@@ -98,7 +98,7 @@ both facts separately so no consumer can conflate them again.
 **Alternative rejected — let each consumer keep deriving what it needs:** that is the status quo, and
 it already produced two subtly different notions of "seen" in one file.
 
-### 4. Review becomes a peer activity package
+### 4. Review becomes a peer module package
 
 `memory-session.ts` moves to `packages/memory-review-engine`, alongside `assessment-engine` and
 `exposure-engine`. The capability is named `memory-review`; the package carries the `-engine` suffix,
@@ -124,7 +124,7 @@ that change's half-life model). Splitting on scheduling-vs-delivery leaves exact
 each question.
 
 **What this supersedes, explicitly:** `add-memory-curve-review` states review folds into existing
-bouts' easy-item dilution slots — "No new activity, no new screen." A separate review bout has since
+bouts' easy-item dilution slots — "No new module, no new screen." A separate review bout has since
 been built and verified on the dev deployment, so that delivery mechanism is superseded. Recording it
 here matters because the alternative is a merged proposal and shipped code that contradict each other
 with nothing saying which won.

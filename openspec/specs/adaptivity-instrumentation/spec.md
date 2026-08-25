@@ -2,15 +2,15 @@
 
 ## Purpose
 
-Captures the event data, randomized assignments, and parent feedback required for future adaptive modeling of learning modality effectiveness, without performing any such inference itself — because at the data volumes available in the first months, premature model-fitting would learn noise rather than signal.
+Captures the event data, randomized assignments, and parent feedback required for future adaptive modeling of teaching-activity effectiveness, without performing any such inference itself — because at the data volumes available in the first months, premature model-fitting would learn noise rather than signal.
 
 ## Requirements
 
 ### Requirement: Full-coverage event logging
-Every learner-facing activity built in this change (currently: the assessment) SHALL log its interactions using the complete event schema defined by the learner-state capability, including contextual fields not yet used by any live adaptation logic (time of day, adult-presence flag, position within session). Logging SHALL NOT be deferred until a consuming model exists.
+Every learner-facing module built in this change (currently: the assessment) SHALL log its interactions using the complete event schema defined by the learner-state capability, including contextual fields not yet used by any live adaptation logic (time of day, adult-presence flag, position within session). Logging SHALL NOT be deferred until a consuming model exists.
 
 #### Scenario: Contextual field logged before it has a consumer
-- **WHEN** an activity records an interaction event
+- **WHEN** a module records an interaction event
 - **THEN** it SHALL populate time-of-day, adult-presence, and session-position fields even though no logic in this change yet reads them for adaptation
 
 ### Requirement: Matched-pair randomization protocol

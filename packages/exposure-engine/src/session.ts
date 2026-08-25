@@ -9,7 +9,13 @@ import {
   type ArmAssignment,
 } from "@shizi/adaptivity";
 import { selectNextCharacter } from "@shizi/curriculum";
-import { computeKnownSet, computeMasteryStates, EventLog, type LearnerEvent } from "@shizi/learner-state";
+import {
+  computeKnownSet,
+  computeMasteryStates,
+  EventLog,
+  type LearnerActivity,
+  type LearnerEvent,
+} from "@shizi/learner-state";
 import {
   DEFAULT_EXPOSURE_SESSION_CONFIG,
   type ExposureItem,
@@ -216,7 +222,9 @@ export class ExposureSession {
       timestamp: now,
       sessionId: this.sessionId,
       character: input.character,
-      modality: this.currentItem.arm,
+      module: "learn",
+      // Arms ARE activity ids by construction (EXPOSURE_ARMS: "listen" | "trace").
+      activity: this.currentItem.arm as LearnerActivity,
       outcome: "correct",
       latencyMs: input.latencyMs,
       positionInSession: this.itemsIssued - 1,

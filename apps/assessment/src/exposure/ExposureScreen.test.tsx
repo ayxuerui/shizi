@@ -46,7 +46,7 @@ describe("ExposureScreen (exposure spec: 'No grading or failure state', 'Arm-bou
   beforeEach(resetDatabase);
   afterEach(resetDatabase);
 
-  // Forces every arm resolution to index 0 ("expose-listen") — keeps this
+  // Forces every arm resolution to index 0 ("listen") — keeps this
   // test off the trace arm entirely, which needs a real hanzi-writer/SVG
   // environment jsdom doesn't provide.
   const forceListenDeps = { random: () => 0 };
@@ -80,7 +80,7 @@ describe("ExposureScreen (exposure spec: 'No grading or failure state', 'Arm-bou
     assertNoScoreLikeText();
   });
 
-  it("logs a full LearnerEvent per completed item, with modality set to the delivered arm (never a recognition modality)", async () => {
+  it("logs a full LearnerEvent per completed item, with module and activity set to the delivered learn/listen shape", async () => {
     const onDone = vi.fn();
     render(
       <ExposureScreen pool={pool} characters={[PHASE_A_SEQUENCE[0]!]} onDone={onDone} deps={forceListenDeps} />,
@@ -92,7 +92,7 @@ describe("ExposureScreen (exposure spec: 'No grading or failure state', 'Arm-bou
     await waitFor(async () => {
       const pending = await listPendingEvents();
       expect(pending).toHaveLength(1);
-      expect(pending[0]).toMatchObject({ character: PHASE_A_SEQUENCE[0], modality: "expose-listen", outcome: "correct" });
+      expect(pending[0]).toMatchObject({ character: PHASE_A_SEQUENCE[0], activity: "listen", outcome: "correct" });
     });
   });
 

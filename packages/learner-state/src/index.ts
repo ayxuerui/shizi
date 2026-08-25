@@ -1,6 +1,12 @@
 export const PACKAGE_NAME = "@shizi/learner-state";
 
-export type { LearnerEvent, MasteryState, Outcome } from "./types.js";
+export type {
+  LearnerEvent,
+  LearnerModule,
+  LearnerActivity,
+  MasteryState,
+  Outcome,
+} from "./types.js";
 export { REQUIRED_EVENT_FIELDS } from "./types.js";
 
 export type { ValidationResult } from "./validation.js";
@@ -13,7 +19,7 @@ export type { MasteryProjectionConfig } from "./mastery-projection.js";
 export {
   computeMasteryStates,
   DEFAULT_MASTERY_CONFIG,
-  DEFAULT_RECOGNITION_MODALITIES,
+  DEFAULT_RECOGNITION_ACTIVITIES,
 } from "./mastery-projection.js";
 
 export { computeKnownSet } from "./known-set-projection.js";

@@ -48,7 +48,7 @@ describe("MemorySession", () => {
     const session = new MemorySession({ sessionId: "s1", pool, dueCharacters: ["山"], deps: makeDeps() });
     session.nextProbe();
     const { event } = session.recordResponse({ character: "山", outcome: "incorrect", latencyMs: 900, adultPresent: true });
-    expect(event.modality).toBe("hear-tap");
+    expect(event.activity).toBe("hear-tap");
     expect(event.outcome).toBe("incorrect");
     expect(validateEvent(event).valid).toBe(true);
   });

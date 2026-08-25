@@ -1,4 +1,4 @@
-/** A teaching-modality identifier, e.g. "hear-tap" — this change's only implemented one. */
+/** A teaching-activity identifier, e.g. "hear-tap" — the value an arm assignment stores. */
 export type Arm = string;
 
 export interface MatchCriteria {

@@ -61,9 +61,9 @@ environment marker in the application.
 - **WHEN** a non-production build is opened
 - **THEN** an environment marker SHALL be visible on the first screen shown at every cold start
 
-#### Scenario: The marker never enters the child-facing activity
-- **WHEN** a non-production build is running a learner activity
-- **THEN** no environment marker SHALL be rendered within that activity, preserving the assessment
+#### Scenario: The marker never enters the child-facing module
+- **WHEN** a non-production build is running a learner module
+- **THEN** no environment marker SHALL be rendered within that module, preserving the assessment
   capability's guarantee that no score-like or status-like text appears during play
 
 #### Scenario: Production builds are unmarked

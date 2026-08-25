@@ -24,7 +24,7 @@ stored as independently-editable state.
 
 ### Requirement: Learner context carries mastery, recency, and introduction ordering
 A learner context SHALL report, for the units it covers: each unit's mastery state, each unit's most
-recent exposure, whether a unit has ever been presented in any activity, and the order in which units
+recent exposure, whether a unit has ever been presented in any module, and the order in which units
 were first introduced. These facts SHALL be available without the consumer inspecting individual
 events.
 
@@ -36,14 +36,14 @@ events.
 #### Scenario: Introduction order
 - **WHEN** a consumer needs the order in which units were introduced
 - **THEN** the context SHALL report that order, derived from each unit's first-ever exposure across
-  every activity, oldest first
+  every module, oldest first
 
 #### Scenario: Exposure recency
 - **WHEN** a consumer needs to know how long ago a unit was last seen
-- **THEN** the context SHALL report each covered unit's most recent exposure across every activity
+- **THEN** the context SHALL report each covered unit's most recent exposure across every module
 
 #### Scenario: Presented but not yet measured
-- **WHEN** a unit has been presented only in an activity that carries no recognition evidence
+- **WHEN** a unit has been presented only in a module that carries no recognition evidence
 - **THEN** the context SHALL report that unit as having been presented, distinctly from a unit that
   has never been presented at all, and SHALL NOT report it as having a mastery state derived from that
   presentation

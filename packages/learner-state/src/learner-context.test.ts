@@ -11,7 +11,8 @@ function event(overrides: Partial<LearnerEvent> = {}): LearnerEvent {
     timestamp: `2026-08-17T10:0${counter}:00.000Z`,
     sessionId: "session-1",
     character: "山",
-    modality: "hear-tap",
+    module: "assess",
+    activity: "hear-tap",
     outcome: "correct",
     latencyMs: 800,
     positionInSession: counter,
@@ -36,11 +37,11 @@ function snapshot(context: LearnerContext) {
   };
 }
 
-describe("deriveLearnerContext (learner-state spec: 'Progress context is the outward contract for other layers')", () => {
+describe("deriveLearnerContext (learner-state spec: 'Learner context is the outward contract for other layers')", () => {
   it("scenario: an introduction-only unit reports as presented, with no mastery state derived from that presentation ('Presented but not yet measured')", () => {
     const context = deriveLearnerContext([
-      event({ character: "山", modality: "expose-listen", timestamp: "2026-08-17T09:00:00.000Z" }),
-      event({ character: "山", modality: "expose-trace", timestamp: "2026-08-17T09:05:00.000Z" }),
+      event({ character: "山", module: "learn", activity: "listen", timestamp: "2026-08-17T09:00:00.000Z" }),
+      event({ character: "山", module: "learn", activity: "trace", timestamp: "2026-08-17T09:05:00.000Z" }),
     ]);
     expect(context.everPresented.has("山")).toBe(true);
     expect(context.masteryStates.has("山")).toBe(false);
@@ -49,7 +50,7 @@ describe("deriveLearnerContext (learner-state spec: 'Progress context is the out
 
   it("a never-seen unit is absent everywhere, distinct from one that is merely presented-but-unmeasured", () => {
     const context = deriveLearnerContext([
-      event({ character: "山", modality: "expose-listen", timestamp: "2026-08-17T09:00:00.000Z" }),
+      event({ character: "山", module: "learn", activity: "listen", timestamp: "2026-08-17T09:00:00.000Z" }),
     ]);
     expect(context.everPresented.has("水")).toBe(false);
     expect(context.masteryStates.has("水")).toBe(false);
@@ -66,12 +67,12 @@ describe("deriveLearnerContext (learner-state spec: 'Progress context is the out
     expect(context.knownSet.has("山")).toBe(true);
   });
 
-  it("mastery still comes only from recognition-modality events, even though presentation counts all of them", () => {
-    // Same shape as the mastered case, but exposure-modality: presented
+  it("mastery still comes only from recognition activities, even though presentation counts all of them", () => {
+    // Same shape as the mastered case, but exposure-activity: presented
     // with recency, yet never measured — the two facts must not conflate.
     const context = deriveLearnerContext([
-      event({ character: "山", modality: "expose-listen", timestamp: "2026-08-17T09:00:00.000Z" }),
-      event({ character: "山", modality: "expose-listen", timestamp: "2026-08-17T09:01:00.000Z" }),
+      event({ character: "山", module: "learn", activity: "listen", timestamp: "2026-08-17T09:00:00.000Z" }),
+      event({ character: "山", module: "learn", activity: "listen", timestamp: "2026-08-17T09:01:00.000Z" }),
     ]);
     expect(context.everPresented.has("山")).toBe(true);
     expect(context.lastExposureByUnit.get("山")).toBe("2026-08-17T09:01:00.000Z");
@@ -83,15 +84,15 @@ describe("deriveLearnerContext (learner-state spec: 'Progress context is the out
     // recognition event — first contact in ANY activity is what counts.
     const context = deriveLearnerContext([
       event({ character: "山", timestamp: "2026-08-18T09:00:00.000Z" }),
-      event({ character: "水", modality: "expose-listen", timestamp: "2026-08-17T09:00:00.000Z" }),
+      event({ character: "水", module: "learn", activity: "listen", timestamp: "2026-08-17T09:00:00.000Z" }),
       event({ character: "火", timestamp: "2026-08-19T09:00:00.000Z" }),
     ]);
     expect(context.introductionOrder).toEqual(["水", "山", "火"]);
   });
 
-  it("scenario: last-exposure follows the most recent event of any modality ('Exposure recency')", () => {
+  it("scenario: last-exposure follows the most recent event of any activity ('Exposure recency')", () => {
     const context = deriveLearnerContext([
-      event({ character: "山", modality: "expose-trace", timestamp: "2026-08-17T09:00:00.000Z" }),
+      event({ character: "山", module: "learn", activity: "trace", timestamp: "2026-08-17T09:00:00.000Z" }),
       event({ character: "山", timestamp: "2026-08-20T12:00:00.000Z", outcome: "incorrect" }),
       event({ character: "水", timestamp: "2026-08-18T09:00:00.000Z" }),
     ]);
@@ -101,7 +102,7 @@ describe("deriveLearnerContext (learner-state spec: 'Progress context is the out
 
   it("scenario: two calls against the same log return identical facts ('Two consumers see the same progress')", () => {
     const events = [
-      event({ character: "水", modality: "expose-listen", timestamp: "2026-08-16T09:00:00.000Z" }),
+      event({ character: "水", module: "learn", activity: "listen", timestamp: "2026-08-16T09:00:00.000Z" }),
       event({ character: "山", timestamp: "2026-08-17T10:00:00.000Z", latencyMs: FAST }),
       event({ character: "山", timestamp: "2026-08-17T11:00:00.000Z", latencyMs: FAST }),
       event({ character: "火", timestamp: "2026-08-19T09:00:00.000Z", latencyMs: FAST }),
@@ -111,7 +112,7 @@ describe("deriveLearnerContext (learner-state spec: 'Progress context is the out
 
   it("the projection is order-insensitive: a shuffled log yields the same facts as the sorted one", () => {
     const sorted = [
-      event({ id: "a", character: "水", modality: "expose-listen", timestamp: "2026-08-16T09:00:00.000Z" }),
+      event({ id: "a", character: "水", module: "learn", activity: "listen", timestamp: "2026-08-16T09:00:00.000Z" }),
       event({ id: "b", character: "山", timestamp: "2026-08-17T10:00:00.000Z", latencyMs: FAST }),
       event({ id: "c", character: "山", timestamp: "2026-08-17T11:00:00.000Z", latencyMs: FAST }),
     ];

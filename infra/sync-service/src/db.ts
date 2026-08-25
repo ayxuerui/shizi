@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import DatabaseConstructor, { type Database } from "better-sqlite3";
 import type { LearnerEvent } from "@shizi/learner-state";
 import type { ArmAssignment, SessionRating } from "@shizi/adaptivity";
@@ -16,7 +17,8 @@ CREATE TABLE IF NOT EXISTS events (
   timestamp TEXT NOT NULL,
   session_id TEXT NOT NULL,
   character TEXT NOT NULL,
-  modality TEXT NOT NULL,
+  module TEXT NOT NULL,
+  activity TEXT NOT NULL,
   outcome TEXT NOT NULL,
   latency_ms INTEGER NOT NULL,
   position_in_session INTEGER NOT NULL,
@@ -56,7 +58,8 @@ interface EventRow {
   timestamp: string;
   session_id: string;
   character: string;
-  modality: string;
+  module: string;
+  activity: string;
   outcome: string;
   latency_ms: number;
   position_in_session: number;
@@ -80,7 +83,8 @@ function rowToEvent(row: EventRow): LearnerEvent {
     timestamp: row.timestamp,
     sessionId: row.session_id,
     character: row.character,
-    modality: row.modality,
+    module: row.module as LearnerEvent["module"],
+    activity: row.activity as LearnerEvent["activity"],
     outcome: row.outcome as LearnerEvent["outcome"],
     latencyMs: row.latency_ms,
     positionInSession: row.position_in_session,
@@ -99,6 +103,8 @@ function rowToAssignment(row: AssignmentRow): ArmAssignment {
     assignedAt: row.assigned_at,
   };
 }
+
+const SCHEMA_VERSION = 1;
 
 interface RatingRow {
   session_id: string;
@@ -125,17 +131,97 @@ export interface EventStore {
   close(): void;
 }
 
+/**
+ * One-time migration to the module/activity event schema
+ * (`rename-event-modality-to-activity` design decision 4): rebuilds the
+ * events table translating legacy `modality` rows, translates assignment
+ * arm values, and stamps `user_version` so it runs at most once per
+ * store. Atomic (single transaction); a consistent pre-migration
+ * snapshot is written beside the database first (`VACUUM INTO`, refused
+ * if the snapshot already exists so a re-run cannot overwrite it).
+ *
+ * Backfill mapping — `expose-listen` → (learn, listen), `expose-trace` →
+ * (learn, trace), `hear-tap` → (assess, hear-tap). The hear-tap → assess
+ * mapping carries the documented imprecision: a legacy hear-tap row
+ * cannot prove which module produced it, and every recorded event
+ * predates the review module.
+ */
+function migrateToActivitySchema(db: Database, storePath: string): void {
+  const version = db.pragma("user_version", { simple: true }) as number;
+  if (version >= SCHEMA_VERSION) return;
+
+  const columns = (
+    db.pragma("table_info(events)") as ReadonlyArray<{ name: string }>
+  ).map((column) => column.name);
+  if (columns.includes("modality")) {
+    const backupPath = `${storePath}.pre-activity-rename.bak`;
+    if (!existsSync(backupPath)) {
+      db.exec(`VACUUM INTO '${backupPath.replaceAll("'", "''")}'`);
+    }
+    db.transaction(() => {
+      db.exec("DROP TABLE IF EXISTS events_new;");
+      db.exec(`
+        CREATE TABLE events_new (
+          id TEXT PRIMARY KEY,
+          timestamp TEXT NOT NULL,
+          session_id TEXT NOT NULL,
+          character TEXT NOT NULL,
+          module TEXT NOT NULL,
+          activity TEXT NOT NULL,
+          outcome TEXT NOT NULL,
+          latency_ms INTEGER NOT NULL,
+          position_in_session INTEGER NOT NULL,
+          prior_exposure_count INTEGER NOT NULL,
+          days_since_last_exposure REAL,
+          time_of_day INTEGER NOT NULL,
+          adult_present INTEGER NOT NULL,
+          received_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        );
+      `);
+      db.exec(`
+        INSERT INTO events_new
+          (id, timestamp, session_id, character, module, activity, outcome,
+           latency_ms, position_in_session, prior_exposure_count,
+           days_since_last_exposure, time_of_day, adult_present, received_at)
+        SELECT
+          id, timestamp, session_id, character,
+          CASE modality
+            WHEN 'expose-listen' THEN 'learn'
+            WHEN 'expose-trace' THEN 'learn'
+            ELSE 'assess'
+          END,
+          CASE modality
+            WHEN 'expose-listen' THEN 'listen'
+            WHEN 'expose-trace' THEN 'trace'
+            ELSE 'hear-tap'
+          END,
+          outcome, latency_ms, position_in_session, prior_exposure_count,
+          days_since_last_exposure, time_of_day, adult_present, received_at
+        FROM events;
+      `);
+      db.exec("DROP TABLE events;");
+      db.exec("ALTER TABLE events_new RENAME TO events;");
+      db.exec(
+        "UPDATE assignments SET arm = 'listen' WHERE arm = 'expose-listen';" +
+          "UPDATE assignments SET arm = 'trace' WHERE arm = 'expose-trace';",
+      );
+    })();
+  }
+  db.pragma(`user_version = ${SCHEMA_VERSION}`);
+}
+
 export function openEventStore(path: string): EventStore {
   const db: Database = new DatabaseConstructor(path);
   db.pragma("journal_mode = WAL");
+  migrateToActivitySchema(db, path);
   db.exec(SCHEMA);
 
   const insertEventStmt = db.prepare(`
     INSERT OR IGNORE INTO events
-      (id, timestamp, session_id, character, modality, outcome, latency_ms,
+      (id, timestamp, session_id, character, module, activity, outcome, latency_ms,
        position_in_session, prior_exposure_count, days_since_last_exposure,
        time_of_day, adult_present)
-    VALUES (@id, @timestamp, @sessionId, @character, @modality, @outcome, @latencyMs,
+    VALUES (@id, @timestamp, @sessionId, @character, @module, @activity, @outcome, @latencyMs,
             @positionInSession, @priorExposureCount, @daysSinceLastExposure,
             @timeOfDay, @adultPresent)
   `);
@@ -161,7 +247,8 @@ export function openEventStore(path: string): EventStore {
         timestamp: event.timestamp,
         sessionId: event.sessionId,
         character: event.character,
-        modality: event.modality,
+        module: event.module,
+        activity: event.activity,
         outcome: event.outcome,
         latencyMs: event.latencyMs,
         positionInSession: event.positionInSession,

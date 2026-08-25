@@ -54,10 +54,10 @@ export function ExposureScreen({ pool, characters, onDone, deps }: ExposureScree
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1.5rem" }}>
       <NarrativeStage beatIndex={state.completedCount} complete={done} />
-      {state.phase === "presenting" && state.item?.arm === "expose-listen" && (
+      {state.phase === "presenting" && state.item?.arm === "listen" && (
         <ListenExposure character={state.item.character} onComplete={completeItem} />
       )}
-      {state.phase === "presenting" && state.item?.arm === "expose-trace" && (
+      {state.phase === "presenting" && state.item?.arm === "trace" && (
         <TraceExposure character={state.item.character} pool={pool} onComplete={completeItem} />
       )}
       {done && (

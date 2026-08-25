@@ -8,7 +8,7 @@ import type { LearnerEvent, MasteryState } from "./types.js";
 
 /**
  * The outward-facing read model other layers consume to answer "what does
- * this learner know?" — per the `learner-state` spec's "Progress context is
+ * this learner know?" — per the `learner-state` spec's "Learner context is
  * the outward contract for other layers" requirement. Consumers obtain their
  * progress facts from here rather than re-deriving mastery, known-set
  * membership, or recency from raw events.
@@ -18,7 +18,7 @@ import type { LearnerEvent, MasteryState } from "./types.js";
  */
 export interface LearnerContext {
   /**
-   * Mastery state per unit, derived from RECOGNITION-modality events only
+   * Mastery state per unit, derived from recognition-activity events only
    * (`computeMasteryStates`). A unit taught only via exposure has no entry
    * here at all — "presented" and "measured" are different facts over
    * different event subsets and must not be conflated.
@@ -31,15 +31,14 @@ export interface LearnerContext {
    */
   readonly knownSet: ReadonlySet<string>;
   /**
-   * Every unit that has ever appeared in ANY event, of any modality or
-   * activity. An exposure-only unit is presented even though it has no
+   * Every unit that has ever appeared in ANY event, of any activity. An exposure-only unit is presented even though it has no
    * mastery entry — this set, not `masteryStates`' keys, answers "has the
    * learner ever seen this?"
    */
   readonly everPresented: ReadonlySet<string>;
   /**
    * Each presented unit's most recent event timestamp (ISO 8601), across
-   * every modality and activity — how long ago a unit was last seen.
+   * every activity — how long ago a unit was last seen.
    */
   readonly lastExposureByUnit: ReadonlyMap<string, string>;
   /**
@@ -51,7 +50,7 @@ export interface LearnerContext {
 }
 
 /**
- * Projects the full progress context out of the event log in one pass.
+ * Projects the full learner context out of the event log in one pass.
  * Pure function of `(events, config)` — same log and config, same facts —
  * so it works offline with no network and no clock access.
  */

@@ -67,7 +67,7 @@ describe("MemoryScreen (daily-memory review, reusing ProbePanel/assessment's no-
     await waitFor(async () => {
       const pending = await listPendingEvents();
       expect(pending).toHaveLength(1);
-      expect(pending[0]).toMatchObject({ character: "山", modality: "hear-tap", outcome: "correct" });
+      expect(pending[0]).toMatchObject({ character: "山", module: "review", activity: "hear-tap", outcome: "correct" });
     });
   });
 });

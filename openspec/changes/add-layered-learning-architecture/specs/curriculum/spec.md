@@ -28,9 +28,9 @@ previously-introduced units.
 
 ### Requirement: Goals are identified by kind, not assumed to be single characters
 Each learning goal a batch returns SHALL identify its subject by both a kind and an identity, so a
-consumer can route a goal to the right activity without assuming every goal is a single character.
+consumer can route a goal to the right module without assuming every goal is a single character.
 Consumers SHALL NOT be required to enumerate the set of possible kinds in order to carry a goal
-through to an activity.
+through to a module.
 
 #### Scenario: A character-tier goal
 - **WHEN** a batch containing a character-tier goal is returned

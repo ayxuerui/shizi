@@ -12,7 +12,7 @@ import { computeKnownSet, computeMasteryStates, type LearnerEvent } from "@shizi
  * from the UI that acts on it.
  *
  * - `learn`: the active batch has a character nobody has ever presented
- *   to the learner yet (in ANY modality/activity) — teach it via
+ *   to the learner yet (in any module) — teach it via
  *   `exposure-engine`.
  * - `assess`: every active-batch character has been introduced at least
  *   once but isn't yet `known`/`shaky` — run a normal (full-pool)
@@ -54,7 +54,7 @@ export const DEFAULT_ACTIVITY_SELECTOR_CONFIG: ActivitySelectorConfig = {
 
 export interface DecideActivityInput {
   pool: CandidatePool;
-  /** This learner's full historical event log, across every activity/modality. */
+  /** This learner's full historical event log, across every module and activity. */
   events: readonly LearnerEvent[];
   /** Local calendar date, e.g. "2026-08-23" — injected, not read from the
    * clock directly, so this function stays a pure, deterministic
@@ -68,7 +68,7 @@ export interface DecideActivityInput {
 /**
  * Best-effort reconstruction of "recently introduced" order from event
  * history: the character's FIRST-ever event timestamp stands in for when
- * it was introduced, across every activity/modality (exposure or
+ * it was introduced, across every module and activity (exposure or
  * assessment's own first-contact frontier probes both count as
  * "introducing" a character). Oldest-first seed, most-recent last, per
  * `CurriculumState.recentlyIntroduced`'s documented convention.
@@ -145,9 +145,9 @@ export function decideActivity(input: DecideActivityInput): ActivityDecision {
   }
 
   // "Ever presented to the learner at all" — deliberately NOT
-  // `masteryStates`, which only carries an entry for RECOGNITION-modality
-  // events (see `learner-state`'s recognition-modality filter). An
-  // exposure-only character (modality `expose-listen`/`expose-trace`) has
+  // `masteryStates`, which only carries an entry for RECOGNITION-activity
+  // events (see `learner-state`'s recognition-activity filter). An
+  // exposure-only character (activities `listen`/`trace`) has
   // been introduced and must not be re-taught, even though it has no
   // mastery-projection entry at all yet.
   const everPresented = new Set(input.events.map((event) => event.character));

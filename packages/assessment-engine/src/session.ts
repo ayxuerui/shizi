@@ -23,7 +23,8 @@ import {
   type SessionDeps,
 } from "./types.js";
 
-const MODALITY = "hear-tap"; // this change's only implemented modality — see adaptivity-instrumentation spec.
+const MODULE = "assess";
+const ACTIVITY = "hear-tap"; // the recognition activity — see adaptivity-instrumentation spec.
 
 export interface CreateAssessmentSessionOptions {
   sessionId: string;
@@ -212,7 +213,8 @@ export class AssessmentSession {
       timestamp: now,
       sessionId: this.sessionId,
       character: input.character,
-      modality: MODALITY,
+      module: MODULE,
+      activity: ACTIVITY,
       outcome: input.outcome,
       latencyMs: input.latencyMs,
       positionInSession: this.probesIssued - 1,

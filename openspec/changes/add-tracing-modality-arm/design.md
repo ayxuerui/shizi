@@ -40,8 +40,8 @@ unhonored assignment). This section covers only the current state that shapes th
 
 ## Decisions
 
-### Exposure is a separate activity, not a probe kind or a bout segment
-**Decision:** exposure is its own screen, launched from a post-unlock activity chooser, with its own
+### Exposure is a separate module, not a probe kind or a bout segment
+**Decision:** exposure is its own screen, launched from a post-unlock module chooser, with its own
 completion bound — not a slot type inside `nextProbe`'s dilution machinery, and not prepended to a bout.
 
 **Rationale:** the assessment bout's entire value is that it measures recognition cleanly. Folding
@@ -98,10 +98,14 @@ on the assumption it works unmodified — see tasks.md.
 **Alternatives considered:** add `hanzi-writer-data` alongside (rejected — redundant data, a second
 license file to track for content that's a strict subset of what's already bundled).
 
-### Exposure events use non-recognition modality identifiers; `known`/`shaky` reads only recognition modalities
-**Decision:** exposure events carry modality identifiers (e.g. `expose-listen`, `expose-trace`) that are
-excluded from a `learner-state`-owned "recognition-modality set" the mastery projection filters on;
-`hear-tap` (the assessment's existing modality) is the initial member of that set.
+### Exposure events use non-recognition identifiers; `known`/`shaky` reads only recognition evidence
+**Decision:** exposure events carry activity identifiers (originally specified as `expose-listen` /
+`expose-trace`; since `rename-event-modality-to-activity` they are the bare activity values
+`listen` / `trace` recorded alongside `module: "learn"`) that are excluded from a `learner-state`-
+owned "recognition-activity set" the mastery projection filters on; `hear-tap` (the assessment's
+existing activity) is the initial member of that set. The guard's intent is unchanged — teaching
+interactions can never promote mastery — and is now carried by the module/activity taxonomy itself
+(see that change's design decision 2).
 
 **Rationale:** the mastery projection's "two consecutive correct responses" language has no modality
 qualifier today, so an unfiltered read would let tracing successes (a production/motor-copying task) or
@@ -128,7 +132,7 @@ a future caller, whereas filtering inside `computeMasteryStates` makes the exclu
 - **[Trade-off]** Exposure has no measurement of its own — a tracing session doesn't itself tell you
   whether the learner recognizes the character, only that they traced it. The comparison only closes
   when a later hear-tap bout re-probes that same character → accepted; this is precisely what keeps
-  exposure and assessment un-confounded (see the separate-activity decision above), and is the intended
+  exposure and assessment un-confounded (see the separate-module decision above), and is the intended
   design, not a gap.
 - **[Trade-off]** Removing probe-time assignment changes when `AssignmentLog` entries appear relative to
   `bootstrap`'s original design → accepted; no historical data exists to break (see decision above), and

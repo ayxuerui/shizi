@@ -43,7 +43,37 @@ interface ShiziDBSchema extends DBSchema {
 }
 
 const DB_NAME = "shizi-assessment";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
+
+/**
+ * v2→v3 row translation (`rename-event-modality-to-activity` design
+ * decision 4): rewrites pre-rename event rows — field `modality`, values
+ * `expose-listen`/`expose-trace`/`hear-tap` — to the `module`/`activity`
+ * schema, in place. Rows already in the new shape pass through untouched,
+ * so re-running is a no-op. The hear-tap → `assess` mapping carries the
+ * documented backfill imprecision (a legacy hear-tap row cannot prove
+ * which module produced it; all recorded data predates the review module).
+ */
+function translateLegacyEventRow(stored: StoredEvent): StoredEvent {
+  const event = stored.event as StoredEvent["event"] & { modality?: string };
+  if (!("modality" in event) || typeof event.modality !== "string") return stored;
+  const mapping: Record<string, { module: "learn" | "assess" | "review"; activity: "listen" | "trace" | "hear-tap" }> = {
+    "expose-listen": { module: "learn", activity: "listen" },
+    "expose-trace": { module: "learn", activity: "trace" },
+    "hear-tap": { module: "assess", activity: "hear-tap" },
+  };
+  const mapped = mapping[event.modality] ?? { module: "assess", activity: "hear-tap" };
+  const { modality: _retired, ...rest } = event;
+  return { ...stored, event: { ...rest, ...mapped } };
+}
+
+/** Same translation for assignment rows' arm values (design decision 5). */
+function translateLegacyAssignmentRow(stored: StoredAssignment): StoredAssignment {
+  const arm = stored.assignment?.arm;
+  if (arm === "expose-listen") return { ...stored, assignment: { ...stored.assignment, arm: "listen" } };
+  if (arm === "expose-trace") return { ...stored, assignment: { ...stored.assignment, arm: "trace" } };
+  return stored;
+}
 
 let dbPromise: Promise<IDBPDatabase<ShiziDBSchema>> | null = null;
 
@@ -58,7 +88,7 @@ let dbPromise: Promise<IDBPDatabase<ShiziDBSchema>> | null = null;
 export function getDB(): Promise<IDBPDatabase<ShiziDBSchema>> {
   if (!dbPromise) {
     dbPromise = openDB<ShiziDBSchema>(DB_NAME, DB_VERSION, {
-      upgrade(db) {
+      async upgrade(db, oldVersion, _newVersion, transaction) {
         if (!db.objectStoreNames.contains("events")) {
           db.createObjectStore("events", { keyPath: "event.id" });
         }
@@ -67,6 +97,21 @@ export function getDB(): Promise<IDBPDatabase<ShiziDBSchema>> {
         }
         if (!db.objectStoreNames.contains("ratings")) {
           db.createObjectStore("ratings", { keyPath: "rating.sessionId" });
+        }
+        // v3 row normalization — purely additive (stores above are kept;
+        // rows are rewritten in place), per the deployment spec's
+        // client-retention backstop. Fresh databases have no rows yet, so
+        // the cursor walks are no-ops for them.
+        void oldVersion;
+        let cursor = await transaction.objectStore("events").openCursor();
+        while (cursor) {
+          await cursor.update(translateLegacyEventRow(cursor.value));
+          cursor = await cursor.continue();
+        }
+        let assignmentCursor = await transaction.objectStore("assignments").openCursor();
+        while (assignmentCursor) {
+          await assignmentCursor.update(translateLegacyAssignmentRow(assignmentCursor.value));
+          assignmentCursor = await assignmentCursor.continue();
         }
       },
     });

@@ -42,8 +42,8 @@ describe("ExposureSession — character selection defers to curriculum", () => {
 
   it("does not reimplement ordering — matches @shizi/curriculum's own selectNextCharacter for the same state", () => {
     const priorEvents = PHASE_A_SEQUENCE.slice(0, 3).flatMap((character, i) => [
-      { id: `k${i}a`, timestamp: "2026-08-01T00:00:00.000Z", sessionId: "s0", character, modality: "hear-tap", outcome: "correct" as const, latencyMs: 500, positionInSession: 0, priorExposureCount: 0, daysSinceLastExposure: null, timeOfDay: 9, adultPresent: true },
-      { id: `k${i}b`, timestamp: "2026-08-01T00:01:00.000Z", sessionId: "s0", character, modality: "hear-tap", outcome: "correct" as const, latencyMs: 500, positionInSession: 1, priorExposureCount: 1, daysSinceLastExposure: 0, timeOfDay: 9, adultPresent: true },
+      { id: `k${i}a`, timestamp: "2026-08-01T00:00:00.000Z", sessionId: "s0", character, module: "assess" as const, activity: "hear-tap" as const, outcome: "correct" as const, latencyMs: 500, positionInSession: 0, priorExposureCount: 0, daysSinceLastExposure: null, timeOfDay: 9, adultPresent: true },
+      { id: `k${i}b`, timestamp: "2026-08-01T00:01:00.000Z", sessionId: "s0", character, module: "assess" as const, activity: "hear-tap" as const, outcome: "correct" as const, latencyMs: 500, positionInSession: 1, priorExposureCount: 1, daysSinceLastExposure: 0, timeOfDay: 9, adultPresent: true },
     ]);
     const session = new ExposureSession({ sessionId: "s1", pool, priorEvents, deps: makeDeps() });
     const result = session.nextItem();
@@ -65,8 +65,8 @@ describe("ExposureSession — character selection defers to curriculum", () => {
   it("reports none-eligible once curriculum has nothing left (mirrors selectNextCharacter's own result shape)", () => {
     const knownEverything = [...pool.keys()];
     const priorEvents = knownEverything.flatMap((character, i) => [
-      { id: `k${i}a`, timestamp: "2026-08-01T00:00:00.000Z", sessionId: "s0", character, modality: "hear-tap", outcome: "correct" as const, latencyMs: 500, positionInSession: 0, priorExposureCount: 0, daysSinceLastExposure: null, timeOfDay: 9, adultPresent: true },
-      { id: `k${i}b`, timestamp: "2026-08-01T00:01:00.000Z", sessionId: "s0", character, modality: "hear-tap", outcome: "correct" as const, latencyMs: 500, positionInSession: 1, priorExposureCount: 1, daysSinceLastExposure: 0, timeOfDay: 9, adultPresent: true },
+      { id: `k${i}a`, timestamp: "2026-08-01T00:00:00.000Z", sessionId: "s0", character, module: "assess" as const, activity: "hear-tap" as const, outcome: "correct" as const, latencyMs: 500, positionInSession: 0, priorExposureCount: 0, daysSinceLastExposure: null, timeOfDay: 9, adultPresent: true },
+      { id: `k${i}b`, timestamp: "2026-08-01T00:01:00.000Z", sessionId: "s0", character, module: "assess" as const, activity: "hear-tap" as const, outcome: "correct" as const, latencyMs: 500, positionInSession: 1, priorExposureCount: 1, daysSinceLastExposure: 0, timeOfDay: 9, adultPresent: true },
     ]);
     const session = new ExposureSession({ sessionId: "s1", pool, priorEvents, deps: makeDeps() });
     const result = session.nextItem();
@@ -77,12 +77,12 @@ describe("ExposureSession — character selection defers to curriculum", () => {
 describe("ExposureSession — arm resolution (exposure spec: 'Arm-bound exposure delivery')", () => {
   it("honors an existing assignment rather than creating a new one", () => {
     const priorAssignments: ArmAssignment[] = [
-      { character: PHASE_A_SEQUENCE[0]!, arm: "expose-trace", pairId: "p1", assignedAt: "2026-08-01T00:00:00.000Z" },
+      { character: PHASE_A_SEQUENCE[0]!, arm: "trace", pairId: "p1", assignedAt: "2026-08-01T00:00:00.000Z" },
     ];
     const session = new ExposureSession({ sessionId: "s1", pool, priorAssignments, deps: makeDeps() });
     const result = session.nextItem();
     if (result.status !== "item") throw new Error("expected an item");
-    expect(result.item.arm).toBe("expose-trace");
+    expect(result.item.arm).toBe("trace");
     expect(session.getAssignments()).toHaveLength(0); // nothing new recorded
   });
 
@@ -105,8 +105,8 @@ describe("ExposureSession — arm resolution (exposure spec: 'Arm-bound exposure
       sessionId: "s1",
       pool: usablePool,
       priorEvents: PHASE_A_SEQUENCE.flatMap((character, i) => [
-        { id: `k${i}a`, timestamp: "2026-08-01T00:00:00.000Z", sessionId: "s0", character, modality: "hear-tap", outcome: "correct" as const, latencyMs: 500, positionInSession: 0, priorExposureCount: 0, daysSinceLastExposure: null, timeOfDay: 9, adultPresent: true },
-        { id: `k${i}b`, timestamp: "2026-08-01T00:01:00.000Z", sessionId: "s0", character, modality: "hear-tap", outcome: "correct" as const, latencyMs: 500, positionInSession: 1, priorExposureCount: 1, daysSinceLastExposure: 0, timeOfDay: 9, adultPresent: true },
+        { id: `k${i}a`, timestamp: "2026-08-01T00:00:00.000Z", sessionId: "s0", character, module: "assess" as const, activity: "hear-tap" as const, outcome: "correct" as const, latencyMs: 500, positionInSession: 0, priorExposureCount: 0, daysSinceLastExposure: null, timeOfDay: 9, adultPresent: true },
+        { id: `k${i}b`, timestamp: "2026-08-01T00:01:00.000Z", sessionId: "s0", character, module: "assess" as const, activity: "hear-tap" as const, outcome: "correct" as const, latencyMs: 500, positionInSession: 1, priorExposureCount: 1, daysSinceLastExposure: 0, timeOfDay: 9, adultPresent: true },
       ]),
       deps: makeDeps({ random }),
     });
@@ -122,13 +122,13 @@ describe("ExposureSession — arm resolution (exposure spec: 'Arm-bound exposure
 });
 
 describe("ExposureSession — completion events (exposure spec: 'Exposure events are non-recognition')", () => {
-  it("records a full LearnerEvent with outcome always 'correct' and modality set to the delivered arm", () => {
+  it("records a full LearnerEvent with outcome always 'correct' and module/activity set to the delivered arm", () => {
     const session = new ExposureSession({ sessionId: "s1", pool, deps: makeDeps() });
     const item = session.nextItem();
     if (item.status !== "item") throw new Error("expected an item");
     const { event } = session.recordCompletion({ character: item.item.character, latencyMs: 1234, adultPresent: false });
     expect(event.outcome).toBe("correct");
-    expect(event.modality).toBe(item.item.arm);
+    expect(event.activity).toBe(item.item.arm);
     expect(event.character).toBe(item.item.character);
     expect(event.latencyMs).toBe(1234);
   });
