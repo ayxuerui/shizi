@@ -41,24 +41,54 @@ function knownEvents(character: string, timestamp: string): LearnerEvent[] {
 describe("decideActivity", () => {
   it("a brand-new learner with no events starts with 'learn' (Phase A is entirely unseen)", () => {
     const decision = decideActivity({ pool, events: [], today: "2026-08-23", lastMemoryBoutDate: null });
-    expect(decision).toEqual({ type: "learn", characters: PHASE_A_SEQUENCE.slice(0, 5) });
+    expect(decision).toEqual({ type: "learn", characters: PHASE_A_SEQUENCE.slice(0, 6) });
   });
 
-  it("once the active batch's characters have all been exposed but aren't yet known, moves to 'assess'", () => {
-    const events: LearnerEvent[] = PHASE_A_SEQUENCE.slice(0, 5).map((character) =>
+  it("once the active batch's characters have all been exposed but aren't yet known, moves to 'assess' scoped to the active batch", () => {
+    const events: LearnerEvent[] = PHASE_A_SEQUENCE.slice(0, 6).map((character) =>
       event({ character, activity: "listen", timestamp: "2026-08-23T09:00:00.000Z" }),
     );
     const decision = decideActivity({ pool, events, today: "2026-08-23", lastMemoryBoutDate: null });
-    expect(decision).toEqual({ type: "assess" });
+    expect(decision).toEqual({ type: "assess", characters: PHASE_A_SEQUENCE.slice(0, 6) });
+  });
+
+  it("assess decision never carries a known/shaky character, even when earlier phase-A characters are already known", () => {
+    // PHASE_A_SEQUENCE[0..2) already known — composeBatch skips them and
+    // fills the active batch from the next not-yet-known phase-A slots
+    // instead of ever re-including a known member.
+    const knownCharacterEvents = PHASE_A_SEQUENCE.slice(0, 2).flatMap((character) =>
+      knownEvents(character, "2026-08-20T09:00:00.000Z"),
+    );
+    const exposedCharacterEvents: LearnerEvent[] = PHASE_A_SEQUENCE.slice(2, 8).map((character) =>
+      event({ character, activity: "listen", timestamp: "2026-08-23T09:00:00.000Z" }),
+    );
+    const decision = decideActivity({
+      pool,
+      events: [...knownCharacterEvents, ...exposedCharacterEvents],
+      today: "2026-08-23",
+      lastMemoryBoutDate: "2026-08-23",
+    });
+    expect(decision).toEqual({ type: "assess", characters: PHASE_A_SEQUENCE.slice(2, 8) });
+    if (decision.type === "assess") {
+      for (const known of PHASE_A_SEQUENCE.slice(0, 2)) expect(decision.characters).not.toContain(known);
+    }
+  });
+
+  it("is a deterministic projection — replaying the same event history twice yields identical decisions", () => {
+    const events: LearnerEvent[] = PHASE_A_SEQUENCE.slice(0, 6).map((character) =>
+      event({ character, activity: "listen", timestamp: "2026-08-23T09:00:00.000Z" }),
+    );
+    const input = { pool, events, today: "2026-08-23", lastMemoryBoutDate: "2026-08-23" };
+    expect(decideActivity(input)).toEqual(decideActivity(input));
   });
 
   it("once the whole active batch is known, moves on to teaching the next batch", () => {
-    const events: LearnerEvent[] = PHASE_A_SEQUENCE.slice(0, 5).flatMap((character) =>
+    const events: LearnerEvent[] = PHASE_A_SEQUENCE.slice(0, 6).flatMap((character) =>
       knownEvents(character, "2026-08-23T09:00:00.000Z"),
     );
     const decision = decideActivity({ pool, events, today: "2026-08-23", lastMemoryBoutDate: "2026-08-23" });
-    // Batch 2 (PHASE_A_SEQUENCE[5..10]) is entirely unseen.
-    expect(decision).toEqual({ type: "learn", characters: PHASE_A_SEQUENCE.slice(5, 10) });
+    // Batch 2 (PHASE_A_SEQUENCE[6..12]) is entirely unseen.
+    expect(decision).toEqual({ type: "learn", characters: PHASE_A_SEQUENCE.slice(6, 12) });
   });
 
   it("runs a memory bout first when something outside the active batch is due, and no memory bout has run today", () => {
@@ -85,8 +115,8 @@ describe("decideActivity", () => {
     const events: LearnerEvent[] = knownEvents(PHASE_A_SEQUENCE[0]!, "2026-08-23T09:00:00.000Z");
     const decision = decideActivity({ pool, events, today: "2026-08-23", lastMemoryBoutDate: null });
     // PHASE_A_SEQUENCE[0] is known and freshly touched (not due); the new
-    // active batch (PHASE_A_SEQUENCE[1..5]) is entirely unintroduced.
-    expect(decision).toEqual({ type: "learn", characters: PHASE_A_SEQUENCE.slice(1, 6) });
+    // active batch (PHASE_A_SEQUENCE[1..7]) is entirely unintroduced.
+    expect(decision).toEqual({ type: "learn", characters: PHASE_A_SEQUENCE.slice(1, 7) });
   });
 });
 

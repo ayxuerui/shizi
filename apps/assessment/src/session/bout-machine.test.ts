@@ -49,6 +49,14 @@ describe("boutReducer (assessment spec: 'No visible scoring or failure state', '
     expect(closed.completionReason).toBe("item-count");
   });
 
+  it("SESSION_COMPLETE with reason 'focus-resolved' reaches the same closing state as any other reason (add-batch-scoped-activities: no UI branches on completionReason)", () => {
+    const probing = boutReducer(INITIAL_BOUT_STATE, { type: "PROBE_READY", probe: PROBE });
+    const closed = boutReducer(probing, { type: "SESSION_COMPLETE", reason: "focus-resolved" });
+    expect(closed.phase).toBe("closing");
+    expect(closed.probe).toBeNull();
+    expect(closed.completionReason).toBe("focus-resolved");
+  });
+
   it("scenario: no cumulative score shown — no field in BoutState can represent a score at all", () => {
     // Structural check, not just behavioral: every key on BoutState is
     // one of these — none of them is a number-of-correct/percent/score.

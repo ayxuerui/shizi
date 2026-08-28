@@ -102,5 +102,13 @@ export function PracticeRouter({ pool, assessmentConfig }: PracticeRouterProps) 
   if (decision.type === "memory") {
     return <MemoryScreen key={key} pool={pool} characters={decision.characters} onDone={() => advance(decision)} />;
   }
-  return <BoutScreen key={key} pool={pool} config={assessmentConfig} onDone={() => advance(decision)} />;
+  return (
+    <BoutScreen
+      key={key}
+      pool={pool}
+      characters={decision.characters}
+      config={assessmentConfig}
+      onDone={() => advance(decision)}
+    />
+  );
 }

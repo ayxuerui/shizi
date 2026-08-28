@@ -8,7 +8,12 @@ import { DEFAULT_CURRICULUM_CONFIG, type ComposedBatch, type CurriculumConfig, t
  * into a simulated known-set/recently-introduced window — the same
  * provisional-state loop `infra/sync-service/scripts/publish-config.ts`
  * used to inline directly. `selectNextCharacter` remains the only
- * selection primitive; this just sequences it.
+ * selection primitive; this just sequences it. Each pick also accumulates
+ * into a local `pickedInBatch` set (starting empty per call, so it never
+ * leaks across batch boundaries), which `selectNextCharacter` enforces as
+ * a hard confusability exclusion independent of `recentWindowSize` —
+ * per `add-batch-scoped-activities` spec: intra-batch non-confusability
+ * holds even when `batchSize > recentWindowSize`.
  *
  * Per `add-batched-curriculum-tagging` spec: stops early (a `short`
  * batch) rather than violating the spacing constraint or fabricating a
@@ -23,12 +28,13 @@ export function composeBatch(
   const characters: string[] = [];
   let simulatedKnown = new Set(state.knownSet);
   let recentlyIntroduced = [...state.recentlyIntroduced];
+  const pickedInBatch = new Set<string>();
   let reason: string | undefined;
 
   for (let i = 0; i < config.batchSize; i++) {
     const result = selectNextCharacter(
       pool,
-      { knownSet: simulatedKnown, recentlyIntroduced },
+      { knownSet: simulatedKnown, recentlyIntroduced, pickedInBatch },
       confusabilityIndex,
       config,
     );
@@ -39,6 +45,7 @@ export function composeBatch(
     characters.push(result.character);
     simulatedKnown = new Set(simulatedKnown).add(result.character);
     recentlyIntroduced = [...recentlyIntroduced, result.character].slice(-config.recentWindowSize);
+    pickedInBatch.add(result.character);
   }
 
   return {

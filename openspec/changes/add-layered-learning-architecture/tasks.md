@@ -69,6 +69,7 @@
 - [ ] 8.4 Note in `openspec/changes/add-tiered-content-progression`'s design or tasks that `LearningGoal` and `ContentRef` must converge on one definition of unit identity, whichever change lands second
 - [ ] 8.5 Amend `openspec/changes/add-memory-curve-review`: replace its "Make review active inside existing bouts / no new module, no new screen" bullet and its `assessment` dilution-slot delta with consuming this change's review module, leaving its `review-scheduling` capability and its `learner-state` delta intact (design decision 4a)
 - [ ] 8.6 Confirm the amended `add-memory-curve-review` and this change contain exactly one definition of due-ness between them — no recency or interval rule outside `review-scheduling`
+- [ ] 8.7 `add-batch-scoped-activities` already created the `learning-orchestration` capability (its module-rotation contract for `learn`/`assess`/`memory` scoped to a batch) under that exact name, anticipating this change. This change's `specs/learning-orchestration/spec.md` delta should target the same capability with `ADDED`/`MODIFIED` operations — never redeclare it as a second capability. Reconcile the overlapping module-selection wording (e.g. `add-batch-scoped-activities`'s "Learn precedes assessment per batch member" vs. this change's "Introduction precedes measurement for a goal") at whichever change archives second, per that change's design.md.
 
 ## 9. Whole-workspace verification
 

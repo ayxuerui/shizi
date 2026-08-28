@@ -15,7 +15,7 @@ export interface ProbeItem {
 
 export type NextProbeResult =
   | { status: "probe"; probe: ProbeItem }
-  | { status: "session-complete"; reason: "duration" | "item-count" };
+  | { status: "session-complete"; reason: "duration" | "item-count" | "focus-resolved" };
 
 export interface RecordResponseInput {
   character: string;
