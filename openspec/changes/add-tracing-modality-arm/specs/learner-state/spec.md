@@ -30,3 +30,9 @@ recognition-modality response with latency above the configured slow-response th
   recognition-modality set
 - **THEN** those events SHALL NOT count toward or against that character's mastery state transitions,
   regardless of their outcome or latency
+
+#### Scenario: Teaching activities do not promote mastery
+- **WHEN** a character's event history contains only events whose modality is not in the configured
+  recognition-modality set
+- **THEN** the character has no mastery-projection entry at all, regardless of how many events or how
+  fast their outcomes were

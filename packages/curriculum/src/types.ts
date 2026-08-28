@@ -11,6 +11,17 @@ export interface CurriculumState {
    * whatever moment you happened to run it").
    */
   recentlyIntroduced: readonly string[];
+  /**
+   * Characters already picked earlier in the batch currently being
+   * composed. Confusability against this set is a hard exclusion in
+   * `selectNextCharacter`, independent of `recentlyIntroduced`'s
+   * count-based window — per `add-batch-scoped-activities` design
+   * decision 1, intra-batch non-confusability is an explicit
+   * composition constraint, not an incidental side effect of
+   * `recentWindowSize`. Omitted (or empty) outside batch composition,
+   * where it has no effect.
+   */
+  pickedInBatch?: ReadonlySet<string>;
 }
 
 export interface ScoringWeights {
@@ -45,10 +56,11 @@ export interface CurriculumConfig {
   /** How many of the most-recently-introduced characters the hard confusability constraint protects. */
   recentWindowSize: number;
   weights: ScoringWeights;
-  /** How many characters make up one batch — defaults to `recentWindowSize`
-   * (5) precisely so the existing spacing constraint alone guarantees no
-   * two batch members are confusable with each other; see
-   * `add-batched-curriculum-tagging` design.md's "Batch size defaults to 5". */
+  /** How many characters make up one batch. Intra-batch non-confusability
+   * is guaranteed explicitly (via `CurriculumState.pickedInBatch`), not
+   * incidentally by `recentWindowSize` — so `batchSize` is free to exceed
+   * `recentWindowSize` without silently losing that guarantee; see
+   * `add-batch-scoped-activities` design.md decisions 1–2. */
   batchSize: number;
   /** How many consecutive batches `composeBatchPlan` composes ahead. */
   batchLookahead: number;
@@ -57,7 +69,7 @@ export interface CurriculumConfig {
 export const DEFAULT_CURRICULUM_CONFIG: CurriculumConfig = {
   recentWindowSize: 5,
   weights: DEFAULT_SCORING_WEIGHTS,
-  batchSize: 5,
+  batchSize: 6,
   batchLookahead: 4,
 };
 

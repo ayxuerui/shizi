@@ -36,7 +36,19 @@ export function selectNextCharacter(
     notYetKnown.push(character);
   }
 
-  const eligible = filterBySpacing(notYetKnown, state, confusabilityIndex, config.recentWindowSize);
+  const spacingEligible = filterBySpacing(notYetKnown, state, confusabilityIndex, config.recentWindowSize);
+
+  // Hard exclusion against the batch composed so far — independent of
+  // recentWindowSize (add-batch-scoped-activities design decision 1), so
+  // it still holds when batchSize > recentWindowSize.
+  const pickedInBatch = state.pickedInBatch;
+  const eligible =
+    pickedInBatch && pickedInBatch.size > 0
+      ? spacingEligible.filter((character) => {
+          const neighbors = confusabilityIndex.get(character);
+          return !neighbors || ![...pickedInBatch].some((picked) => neighbors.has(picked));
+        })
+      : spacingEligible;
 
   if (eligible.length === 0) {
     return {
@@ -44,7 +56,9 @@ export function selectNextCharacter(
       reason:
         notYetKnown.length === 0
           ? "no not-yet-known, usable candidates remain in the pool"
-          : "every not-yet-known, usable candidate is confusable with a recently-introduced character",
+          : spacingEligible.length === 0
+            ? "every not-yet-known, usable candidate is confusable with a recently-introduced character"
+            : "every not-yet-known, usable candidate is confusable with a character already picked in this batch",
     };
   }
 

@@ -33,6 +33,11 @@ async function defaultOnRating(rating: SessionRating): Promise<void> {
 export interface UseAssessmentSessionOptions {
   sessionId: string;
   pool: CandidatePool;
+  /** Restricts informative probes to these characters — the active
+   * batch's unresolved members, per the `learning-orchestration` spec.
+   * Omitted (or empty) runs an unfocused, whole-pool bout, exactly as
+   * every session behaved before this option existed. */
+  focusCharacters?: readonly string[];
   config?: AssessmentSessionConfig;
   deps?: Partial<SessionDeps>;
   /** Defaults to loading this device's local history from the offline
@@ -79,6 +84,7 @@ export function useAssessmentSession(options: UseAssessmentSessionOptions): UseA
   const {
     sessionId,
     pool,
+    focusCharacters,
     config,
     deps,
     loadPriorEvents: loadPriorEventsImpl = loadPriorEvents,
@@ -144,6 +150,7 @@ export function useAssessmentSession(options: UseAssessmentSessionOptions): UseA
         sessionId,
         pool,
         priorEvents,
+        ...(focusCharacters ? { focusCharacters } : {}),
         ...(config ? { config } : {}),
         deps: { ...deps, elapsedMs: clock.elapsedMs },
       });

@@ -16,6 +16,11 @@ export interface BoutScreenProps {
    * default when omitted, so every existing test that constructs
    * `<BoutScreen>` with no props keeps working unchanged. */
   pool?: CandidatePool;
+  /** Restricts informative probes to these characters — the active
+   * batch's unresolved members (`learning-orchestration` spec). Omitted
+   * (or empty) runs an unfocused, whole-pool bout, exactly as every
+   * existing test/usage that omits this prop behaved before it existed. */
+  characters?: readonly string[];
   config?: AssessmentSessionConfig;
   /** Called once the parent has rated (or skipped rating) and the bout
    * has fully settled (`phase === "done"`). Optional — omitted by
@@ -30,12 +35,13 @@ export interface BoutScreenProps {
  * takes over once the session completes. All the actual state lives in
  * `useAssessmentSession` — this component just maps `BoutState` to markup.
  */
-export function BoutScreen({ pool: poolProp, config, onDone }: BoutScreenProps = {}) {
+export function BoutScreen({ pool: poolProp, characters, config, onDone }: BoutScreenProps = {}) {
   const sessionId = useMemo(() => crypto.randomUUID(), []);
   const pool = useMemo(() => poolProp ?? loadCandidatePool(), [poolProp]);
   const { state, submitResponse, rate, skipRating, timing } = useAssessmentSession({
     sessionId,
     pool,
+    ...(characters ? { focusCharacters: characters } : {}),
     ...(config ? { config } : {}),
   });
   const { play } = useInteractionSound();

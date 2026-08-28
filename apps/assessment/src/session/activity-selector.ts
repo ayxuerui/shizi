@@ -4,36 +4,16 @@ import { composeBatch, DEFAULT_CURRICULUM_CONFIG, type CurriculumConfig } from "
 import { computeKnownSet, computeMasteryStates, type LearnerEvent } from "@shizi/learner-state";
 
 /**
- * The three activities a complete per-batch cycle rotates through — no
- * spec names this orchestration yet (this project has specs for `learn`
- * (`exposure`), `assessment`, and per-character mastery, but nothing that
- * decides WHEN to run which one for a given batch). This is that
- * decision, kept as a small pure function so it's independently testable
- * from the UI that acts on it.
- *
- * - `learn`: the active batch has a character nobody has ever presented
- *   to the learner yet (in any module) — teach it via
- *   `exposure-engine`.
- * - `assess`: every active-batch character has been introduced at least
- *   once but isn't yet `known`/`shaky` — run a normal (full-pool)
- *   assessment bout. Deliberately NOT scoped to just the batch's
- *   characters: `AssessmentSession`'s easy-item dilution draws from the
- *   learner's ENTIRE known-set (see its own doc comment), and its
- *   distractor generator looks up attributes for whatever character that
- *   draws by indexing the SAME pool passed to the session — restricting
- *   that pool to 5 characters would break distractor lookups for
- *   already-known characters from earlier batches. Frontier search
- *   across the full pool naturally gravitates toward the batch's
- *   not-yet-known characters anyway, since curriculum and frontier
- *   search both rank by the same underlying difficulty signal.
- * - `memory`: at least one `known` character outside the active batch
- *   hasn't been touched in `memoryDueAfterDays`, and no memory bout has
- *   run yet today — a lightweight spaced-repetition review, run once per
- *   day ahead of new-content work.
+ * The three activities a complete per-batch cycle rotates through, kept
+ * as a small pure function so it's independently testable from the UI
+ * that acts on it. See the `learning-orchestration` spec
+ * (`add-batch-scoped-activities`) for the full per-batch rotation
+ * contract this implements — batch binding, learn-before-assess,
+ * assess/memory scoping, and the determinism requirement.
  */
 export type ActivityDecision =
   | { type: "learn"; characters: readonly string[] }
-  | { type: "assess" }
+  | { type: "assess"; characters: readonly string[] }
   | { type: "memory"; characters: readonly string[] };
 
 export interface ActivitySelectorConfig {
@@ -154,5 +134,13 @@ export function decideActivity(input: DecideActivityInput): ActivityDecision {
   const unintroduced = batch.characters.filter((character) => !everPresented.has(character));
   if (unintroduced.length > 0) return { type: "learn", characters: unintroduced };
 
-  return { type: "assess" };
+  // Every batch member has been introduced (the branch above would have
+  // fired otherwise), and `composeBatch` already excludes `known`/`shaky`
+  // characters from ever entering `batch.characters` — so the batch's
+  // full character list IS exactly its unresolved members; no further
+  // filtering is needed. If the batch came back empty (pool exhaustion,
+  // `batch.short` with nothing composed), `characters` is `[]`, which
+  // `AssessmentSession` treats as "no focus" — an unfocused, whole-pool
+  // bout, rather than a dead-ended session.
+  return { type: "assess", characters: batch.characters };
 }

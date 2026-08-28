@@ -25,7 +25,10 @@ The system SHALL support assigning a not-yet-known character to one of a configu
 - **THEN** the assignment record SHALL be written immediately, not deferred until a learning outcome is observed
 
 ### Requirement: No inference performed in this change
-The system SHALL NOT compute or surface any per-modality effectiveness estimate, retention-model output, or routing decision based on the logged data in this change. Data collection and randomization SHALL be fully separated from any future inference component.
+
+The system SHALL NOT compute or surface any per-activity teaching-effectiveness estimate,
+retention-model output, or routing decision based on the logged data in this change. Data
+collection and randomization SHALL be fully separated from any future inference component.
 
 #### Scenario: Modality comparison data collected without a comparison result
 - **WHEN** matched-pair assignments and their associated events accumulate over multiple sessions

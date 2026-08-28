@@ -10,7 +10,7 @@ A relevant mathematical fact shapes Decision 1: with `recentWindowSize = 5`, the
 - Make intra-batch non-confusability an explicit composition constraint, independent of window size
 - Default batch size 6
 - Assessment engine accepts a per-session focused character set without disturbing dilution, forced slots, or distractor sourcing
-- Rotation decisions carry character lists for every module; document the contract in the new orchestration spec
+- Rotation decisions carry character lists for every module; document the contract in the new `learning-orchestration` spec
 
 **Non-Goals:**
 - No parent batch-review gate, frozen-batch persistence, published-plan consumption, or package extraction (`add-batched-curriculum-tagging` §2–9 / layered architecture own those)
@@ -31,13 +31,14 @@ The two knobs decouple by virtue of Decision 1. Phase A (25 chars) becomes 4 ful
 When all focused characters reach resolved outcomes before duration/item bounds, `nextProbe()` returns `session-complete` with reason `"focus-resolved"`. This extends two unions: `NextProbeResult`'s reason and `bout-machine.ts`'s `completionReason`. The closing beat stays identical regardless of reason (per spec scenario), so UI copy does not branch on it.
 
 **5. `ActivityDecision` assess variant becomes `{ type: "assess"; characters: readonly string[] }`.**
-`decideActivity()` computes unresolved batch members (introduced, mastery not `known`/`shaky`) and returns them. Guard: if that list is empty while the batch was fully introduced, fall through to treating the batch as complete — recomposition against the updated known-set naturally yields the next batch (whose unintroduced members route back to `learn`). `PracticeRouter` forwards the list through `BoutScreen` into `use-assessment-session` → `CreateAssessmentSessionOptions`. The long doc comment in `activity-selector.ts` shrinks to a pointer at the orchestration spec.
+`decideActivity()` computes unresolved batch members (introduced, mastery not `known`/`shaky`) and returns them. Guard: if that list is empty while the batch was fully introduced, fall through to treating the batch as complete — recomposition against the updated known-set naturally yields the next batch (whose unintroduced members route back to `learn`). `PracticeRouter` forwards the list through `BoutScreen` into `use-assessment-session` → `CreateAssessmentSessionOptions`. The long doc comment in `activity-selector.ts` shrinks to a pointer at the `learning-orchestration` spec.
 
 ## Risks / Trade-offs
 
 - [Focused bouts measure fewer distinct characters, slowing confirmation of older `shaky` characters] → Mitigation: forced identity/`shaky` slots are retained by Decision 3, and the daily memory bout continues covering stale knowns; revisit if rolling accuracy band drifts.
 - [`focus-resolved` union extension ripples into reducers/tests] → Mitigation: single new enum member, mapped to the existing closing beat; covered by bout-machine and engine tests.
 - [Curriculum delta collides with the un-archived `add-batched-curriculum-tagging` delta, which also adds batch requirements (default size 5)] → Mitigation: this change supersedes the size-default and constraint wording; reconcile both deltas at whichever archive happens second.
+- [`add-layered-learning-architecture` also targets a `learning-orchestration` capability (its "Learning Layer"), with its own near-duplicate module-selection requirements] → Mitigation: this change's new capability is deliberately named `learning-orchestration` (not `orchestration`) so there is exactly one orchestration capability, not two. This change's requirements (batch binding, learn-before-assess, assess/memory scoping, determinism) land first via `ADDED Requirements`; `add-layered-learning-architecture`'s delta should target the same capability with its own `ADDED`/`MODIFIED` operations (context/goal/queue-driven selection, the terminal state, outcome reporting) rather than re-declaring the capability. Reconcile wording overlap (e.g. "Learn precedes assessment per batch member" vs. "Introduction precedes measurement for a goal") at whichever change archives second.
 - [Larger batches slightly delay per-character first exposure within Phase A] → Mitigation: accepted trade-off of the requested batch size; short-batch behavior bounds worst case.
 
 ## Migration Plan

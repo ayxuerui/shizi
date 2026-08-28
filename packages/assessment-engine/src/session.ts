@@ -31,6 +31,12 @@ export interface CreateAssessmentSessionOptions {
   pool: CandidatePool;
   /** This learner's full historical event log (all prior sessions) — used to seed the frontier bracket and compute prior-exposure/days-since-last-exposure. Empty for a brand-new learner. */
   priorEvents?: readonly LearnerEvent[];
+  /** When supplied (non-empty), restricts frontier-derived informative
+   * probes to this set — `assessment` spec's "Focused probing scope"
+   * requirement. Dilution, forced identity/shaky slots, and distractor
+   * generation are unaffected. Absent or empty means no focus, matching
+   * every session's behavior before this option existed. */
+  focusCharacters?: readonly string[];
   config?: AssessmentSessionConfig;
   deps?: Partial<SessionDeps>;
 }
@@ -58,6 +64,8 @@ export class AssessmentSession {
   private readonly config: AssessmentSessionConfig;
   private readonly deps: SessionDeps;
   private readonly priorEvents: readonly LearnerEvent[];
+  /** Null means no focus — every existing session behaves exactly as before. */
+  private readonly focusCharacters: ReadonlySet<string> | null;
   private readonly eventLog = new EventLog();
   private readonly difficultyIndex: ReadonlyMap<string, number>;
   private readonly confusabilityIndex: ReadonlyMap<string, ReadonlySet<string>>;
@@ -75,6 +83,8 @@ export class AssessmentSession {
     this.sessionId = options.sessionId;
     this.pool = options.pool;
     this.priorEvents = options.priorEvents ?? [];
+    this.focusCharacters =
+      options.focusCharacters && options.focusCharacters.length > 0 ? new Set(options.focusCharacters) : null;
     this.config = options.config ?? DEFAULT_ASSESSMENT_SESSION_CONFIG;
     // Same lazy-default idiom as @shizi/adaptivity's AssignmentDeps: real
     // usage gets real wall-clock/randomness by default, tests override
@@ -114,6 +124,17 @@ export class AssessmentSession {
       guessDetectionThresholdMs: this.config.guessDetection.fastThresholdMs,
     });
     const knownSet = computeKnownSet(masteryStates);
+
+    // Per `assessment` spec's "Bout concludes when the focused set is
+    // resolved" scenario: "resolved" is exactly what disqualifies a
+    // character from further frontier probing — confirmed known, or
+    // demoted to shaky and so excluded from `buildFrontierCandidates`
+    // (which treats `knownSet` as already-resolved) by that same
+    // exclusion, i.e. no longer `unseen`/`probing`.
+    if (this.focusCharacters && [...this.focusCharacters].every((character) => knownSet.has(character))) {
+      return { status: "session-complete", reason: "focus-resolved" };
+    }
+
     const shakyCharacters = [...masteryStates.entries()]
       .filter(([, state]) => state === "shaky")
       .map(([character]) => character);
@@ -139,7 +160,14 @@ export class AssessmentSession {
         character = identityAndShakyPool[this.identityAndShakyCursor % identityAndShakyPool.length]!;
         this.identityAndShakyCursor += 1;
       } else {
-        const candidates = buildFrontierCandidates(this.pool, knownSet, this.difficultyIndex);
+        const frontierCandidates = buildFrontierCandidates(this.pool, knownSet, this.difficultyIndex);
+        // Only the informative-probe candidate list narrows under focus —
+        // dilution, forced identity/shaky slots, distractor generation,
+        // and the bracket bounds below all keep drawing from their
+        // existing, broader sources (spec's "Focused probing scope").
+        const candidates = this.focusCharacters
+          ? frontierCandidates.filter((candidate) => this.focusCharacters!.has(candidate.character))
+          : frontierCandidates;
         const bounds = computeFrontierBounds(events, knownSet, this.difficultyIndex);
         const picked = selectNextFrontierProbe(candidates, bounds, this.informativeSlotsServed);
         if (picked) {

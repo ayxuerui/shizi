@@ -29,10 +29,18 @@ Every learner-interaction event SHALL record, at minimum: a unique event identif
 - **THEN** the system SHALL persist one event containing all required fields listed above
 
 ### Requirement: Known-set and mastery projection
-The system SHALL derive, for every character in the candidate pool, a mastery state of `unseen`, `probing`, `known`, or `shaky`, computed from the event log. A character SHALL transition to `known` only after at least two consecutive correct responses with response latency below the configured guess-detection threshold. A character previously `known` SHALL transition to `shaky` on any incorrect response or any correct response with latency above the configured slow-response threshold.
+
+The system SHALL derive, for every character in the candidate pool, a mastery state of `unseen`,
+`probing`, `known`, or `shaky`, computed from the event log. A character SHALL transition to
+`known` only after at least two consecutive correct responses with response latency below the
+configured guess-detection threshold. A character previously `known` SHALL transition to `shaky`
+on any incorrect response or any correct response with latency above the configured slow-response
+threshold. Only **recognition-activity evidence** — a correct `hear-tap` response — SHALL count
+toward promotion; `listen` and `trace` activities are teaching interactions and SHALL never
+promote a character toward `known`, whatever their outcome.
 
 #### Scenario: Two fast correct responses promote to known
-- **WHEN** a character has at least two consecutive correct responses, each with latency below the guess-detection threshold
+- **WHEN** a character has at least two consecutive correct `hear-tap` responses, each with latency below the guess-detection threshold
 - **THEN** its mastery state SHALL be `known`
 
 #### Scenario: A single miss demotes a known character
@@ -40,8 +48,13 @@ The system SHALL derive, for every character in the candidate pool, a mastery st
 - **THEN** its mastery state SHALL transition to `shaky`
 
 #### Scenario: Slow correct response does not count toward known
-- **WHEN** a character receives a correct response with latency above the guess-detection threshold
+- **WHEN** a character receives a correct `hear-tap` response with latency above the guess-detection threshold
 - **THEN** that response SHALL NOT count toward the two-consecutive-correct requirement for promotion to `known`
+
+#### Scenario: Teaching activities do not promote mastery
+- **WHEN** a character's event history contains only `listen` and `trace` activities
+- **THEN** the character has no mastery-projection entry at all, regardless of how many events
+  or how fast their outcomes were
 
 ### Requirement: Offline durability and idempotent sync
 The client SHALL queue events locally when offline and SHALL be fully usable with no network connectivity. Each event SHALL carry a client-generated identifier such that re-sending the same event after a retry or reconnect SHALL NOT create a duplicate record.

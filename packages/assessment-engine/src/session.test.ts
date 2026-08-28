@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { assembleCandidatePool } from "@shizi/character-data";
-import { computeMasteryStates, exportToJsonl, parseJsonl, validateEvent } from "@shizi/learner-state";
+import { assembleCandidatePool, IDENTITY_CHARACTERS } from "@shizi/character-data";
+import { computeMasteryStates, exportToJsonl, parseJsonl, validateEvent, type LearnerEvent } from "@shizi/learner-state";
 import type { AssessmentSessionConfig, SessionDeps } from "./types.js";
 import { DEFAULT_ASSESSMENT_SESSION_CONFIG } from "./types.js";
 import { AssessmentSession } from "./session.js";
@@ -231,5 +231,229 @@ describe("AssessmentSession — full bout integration against the real candidate
     const second = runFullSession(makeDeps());
     expect(second.probeKinds).toEqual(first.probeKinds);
     expect(second.session.getEvents()).toEqual(first.session.getEvents());
+  });
+});
+
+function priorEvent(overrides: Partial<LearnerEvent>): LearnerEvent {
+  return {
+    id: "prior",
+    timestamp: "2026-08-19T09:00:00.000Z",
+    sessionId: "prior-session",
+    character: "x",
+    module: "assess",
+    activity: "hear-tap",
+    outcome: "correct",
+    latencyMs: 200,
+    positionInSession: 0,
+    priorExposureCount: 0,
+    daysSinceLastExposure: null,
+    timeOfDay: 9,
+    adultPresent: true,
+    ...overrides,
+  };
+}
+
+describe("AssessmentSession — focused probing scope (add-batch-scoped-activities spec: 'Focused probing scope')", () => {
+  const FOCUS: readonly string[] = ["山", "水"];
+  // Every slot informative, so 40 iterations comfortably exercise both
+  // genuine frontier picks and the forced identity/shaky rotation
+  // (every 3rd informative slot) without ever answering correctly —
+  // nothing gets promoted to known, so the focused set never resolves
+  // mid-test.
+  const ALL_INFORMATIVE_CONFIG: AssessmentSessionConfig = {
+    ...DEFAULT_ASSESSMENT_SESSION_CONFIG,
+    dilution: { easyPerInformative: 0 },
+  };
+
+  it("scenario: informative probes stay inside the focused set", () => {
+    const session = new AssessmentSession({
+      sessionId: "s1",
+      pool,
+      focusCharacters: FOCUS,
+      config: ALL_INFORMATIVE_CONFIG,
+      deps: makeDeps(),
+    });
+
+    const genuineFrontierCharacters: string[] = [];
+    for (let i = 0; i < 20; i++) {
+      const next = session.nextProbe();
+      if (next.status !== "probe") break;
+      // Forced identity/shaky slots are tagged "informative" too but are
+      // explicitly allowed outside focus (next scenario) — exclude them
+      // here to isolate genuine frontier-derived picks.
+      if (!IDENTITY_CHARACTERS.has(next.probe.character)) {
+        genuineFrontierCharacters.push(next.probe.character);
+      }
+      session.recordResponse({
+        character: next.probe.character,
+        outcome: "incorrect",
+        latencyMs: 4000,
+        adultPresent: true,
+      });
+    }
+
+    expect(genuineFrontierCharacters.length).toBeGreaterThan(0);
+    for (const character of genuineFrontierCharacters) {
+      expect(FOCUS).toContain(character);
+    }
+  });
+
+  it("scenario: dilution continues from broader sources under focus, including characters outside the focused set", () => {
+    // Seed a character as already known via PRIOR history — the only way
+    // a non-focus character can ever enter the known-set, since focus
+    // restricts what THIS session can newly probe informatively.
+    const priorEvents: LearnerEvent[] = [
+      priorEvent({ id: "p1", character: "大", timestamp: "2026-08-19T09:00:00.000Z" }),
+      priorEvent({ id: "p2", character: "大", timestamp: "2026-08-19T09:01:00.000Z" }),
+    ];
+    const session = new AssessmentSession({
+      sessionId: "s1",
+      pool,
+      priorEvents,
+      focusCharacters: FOCUS, // does not include 大
+      deps: makeDeps(),
+    });
+
+    const easyCharacters = new Set<string>();
+    for (let i = 0; i < 20; i++) {
+      const next = session.nextProbe();
+      if (next.status !== "probe") break;
+      if (next.probe.kind === "easy") easyCharacters.add(next.probe.character);
+      session.recordResponse({
+        character: next.probe.character,
+        outcome: "correct",
+        latencyMs: 500,
+        adultPresent: true,
+      });
+    }
+
+    expect(easyCharacters.has("大")).toBe(true); // outside the focused set, but in the known-set
+  });
+
+  it("scenario: forced identity/shaky slots may fall outside focus", () => {
+    const session = new AssessmentSession({
+      sessionId: "s1",
+      pool,
+      focusCharacters: FOCUS,
+      config: ALL_INFORMATIVE_CONFIG,
+      deps: makeDeps(),
+    });
+
+    const forcedSlotCharacters: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const next = session.nextProbe();
+      if (next.status !== "probe") break;
+      // config.identityAndShakyEveryNInformativeSlots defaults to 3 — the
+      // 1st, 4th, 7th... served (informative) slots are forced.
+      if (i % DEFAULT_ASSESSMENT_SESSION_CONFIG.identityAndShakyEveryNInformativeSlots === 0) {
+        forcedSlotCharacters.push(next.probe.character);
+      }
+      session.recordResponse({
+        character: next.probe.character,
+        outcome: "incorrect",
+        latencyMs: 4000,
+        adultPresent: true,
+      });
+    }
+
+    expect(forcedSlotCharacters.length).toBeGreaterThan(0);
+    for (const character of forcedSlotCharacters) {
+      expect(IDENTITY_CHARACTERS.has(character)).toBe(true);
+      expect(FOCUS).not.toContain(character);
+    }
+  });
+
+  it("scenario: distractor generation uses whole-pool attributes, not restricted to the focused set", () => {
+    const session = new AssessmentSession({
+      sessionId: "s1",
+      pool,
+      focusCharacters: FOCUS,
+      config: ALL_INFORMATIVE_CONFIG,
+      deps: makeDeps(),
+    });
+
+    let sawOutOfFocusOption = false;
+    for (let i = 0; i < 10; i++) {
+      const next = session.nextProbe();
+      if (next.status !== "probe") break;
+      if (next.probe.options.some((option) => !FOCUS.includes(option) && !IDENTITY_CHARACTERS.has(option))) {
+        sawOutOfFocusOption = true;
+      }
+      session.recordResponse({
+        character: next.probe.character,
+        outcome: "incorrect",
+        latencyMs: 4000,
+        adultPresent: true,
+      });
+    }
+
+    expect(sawOutOfFocusOption).toBe(true);
+  });
+
+  it("scenario: bout concludes when the focused set is resolved, before the duration or item-count bound", () => {
+    const config: AssessmentSessionConfig = {
+      ...ALL_INFORMATIVE_CONFIG,
+      maxItems: 1000, // effectively unbounded — isolate focus-resolved from item-count
+      maxDurationMs: 10_000_000,
+    };
+    const session = new AssessmentSession({
+      sessionId: "s1",
+      pool,
+      focusCharacters: FOCUS,
+      config,
+      deps: makeDeps(),
+    });
+
+    let result;
+    // Always answer fast-correct so every focus character reaches
+    // `known` within two consecutive hits, well under either bound.
+    for (let i = 0; i < 100; i++) {
+      const next = session.nextProbe();
+      if (next.status !== "probe") {
+        result = next;
+        break;
+      }
+      session.recordResponse({
+        character: next.probe.character,
+        outcome: "correct",
+        latencyMs: 100,
+        adultPresent: true,
+      });
+    }
+
+    expect(result).toEqual({ status: "session-complete", reason: "focus-resolved" });
+    const knownSet = computeMasteryStates(session.getEvents());
+    for (const character of FOCUS) {
+      expect(knownSet.get(character)).toBe("known");
+    }
+  });
+
+  it("omitting focusCharacters (or passing an empty array) behaves identically to every session before this option existed", () => {
+    function runUnfocused(focusCharacters?: readonly string[]) {
+      const session = new AssessmentSession({
+        sessionId: "s1",
+        pool,
+        ...(focusCharacters ? { focusCharacters } : {}),
+        config: { ...DEFAULT_ASSESSMENT_SESSION_CONFIG, maxItems: 10 },
+        deps: makeDeps(),
+      });
+      const characters: string[] = [];
+      for (;;) {
+        const next = session.nextProbe();
+        if (next.status !== "probe") break;
+        characters.push(next.probe.character);
+        session.recordResponse({
+          character: next.probe.character,
+          outcome: "incorrect",
+          latencyMs: 4000,
+          adultPresent: true,
+        });
+      }
+      return characters;
+    }
+
+    const withoutOption = runUnfocused(undefined);
+    const withEmptyArray = runUnfocused([]);
+    expect(withEmptyArray).toEqual(withoutOption);
   });
 });

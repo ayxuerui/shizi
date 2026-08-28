@@ -89,6 +89,39 @@ describe("BoutScreen (assessment spec: 'No visible scoring or failure state', 'N
     assertNoScoreLikeText();
   });
 
+  it("accepts a `characters` prop (add-batch-scoped-activities: focused probing scope) and still completes a full bout with no score ever shown", async () => {
+    render(
+      <BoutScreen
+        characters={["山", "水"]}
+        config={{ ...DEFAULT_ASSESSMENT_SESSION_CONFIG, maxItems: 2 }}
+      />,
+    );
+
+    // This is a wiring/regression test, not a re-derivation of focused-
+    // probing semantics — that's covered exhaustively at the engine level
+    // (@shizi/assessment-engine's session.test.ts). Here we only confirm
+    // the prop threads through BoutScreen -> useAssessmentSession ->
+    // AssessmentSession without breaking rendering or bout completion.
+    const options1 = await screen.findAllByRole("button", { name: /^[一-鿿]$/ });
+    assertNoScoreLikeText();
+    tap(options1[0]!);
+
+    await waitFor(
+      () => {
+        const buttons = screen.getAllByRole("button", { name: /^[一-鿿]$/ });
+        expect(buttons.length).toBeGreaterThan(0);
+        expect(buttons[0]).toBeEnabled();
+      },
+      { timeout: 3000 },
+    );
+    const options2 = screen.getAllByRole("button", { name: /^[一-鿿]$/ });
+    tap(options2[0]!);
+
+    const closingHeading = await screen.findByText(/悟空到家了/, {}, { timeout: 3000 });
+    expect(closingHeading).toBeInTheDocument();
+    assertNoScoreLikeText();
+  });
+
   it("options are always accessible buttons with a real character label, enabled while probing", async () => {
     render(<BoutScreen config={{ ...DEFAULT_ASSESSMENT_SESSION_CONFIG, maxItems: 2 }} />);
     const options = await screen.findAllByRole("button", { name: /^[一-鿿]$/ });
