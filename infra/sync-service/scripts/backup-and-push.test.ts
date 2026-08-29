@@ -1,11 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { LearnerEvent } from "@shizi/learner-state";
 import { openEventStore, type EventStore } from "../src/db.js";
-import { assertCleanOutsideExport, DirtyCloneError, runBackup } from "./backup-and-push.js";
+import { assertCleanOutsideExport, DirtyCloneError, rebaseThenPush, runBackup } from "./backup-and-push.js";
 
 function git(args: string[], cwd: string): string {
   return execFileSync("git", args, { cwd, encoding: "utf8" });
@@ -109,6 +109,96 @@ describe("backup-and-push (harden-event-store, specs/deployment/spec.md)", () =>
       expect(eventsJsonl).toContain("evt-1");
       const backupLog = readFileSync(join(repoDir, "data", "events", "backup-log.txt"), "utf8");
       expect(backupLog).toContain("2026-08-22T00:00:00.000Z ran: 1 events, 0 ratings");
+    });
+
+    it("pushes even after origin/main has moved independently (rebaseThenPush — the six-days-of-stalled-backups bug)", () => {
+      // A real scratch remote + two clones, mirroring production's shape:
+      // the deploy clone (cron pushes from here) and "GitHub" (PR merges
+      // move main independently of the deploy clone).
+      const scratchDir = mkdtempSync(join(tmpdir(), "shizi-backup-push-test-"));
+      try {
+        const originDir = join(scratchDir, "origin.git");
+        mkdirSync(originDir);
+        git(["init", "-q", "--bare", "--initial-branch=main", originDir], scratchDir);
+
+        const deployDir = join(scratchDir, "deploy");
+        git(["clone", "-q", originDir, deployDir], scratchDir);
+        initScratchRepo(deployDir);
+        git(["push", "-q", "-u", "origin", "main"], deployDir);
+
+        // A PR merges on "GitHub": origin/main moves without the deploy
+        // clone knowing.
+        const prDir = join(scratchDir, "pr");
+        git(["clone", "-q", originDir, prDir], scratchDir);
+        git(["config", "user.email", "test@example.com"], prDir);
+        git(["config", "user.name", "Test"], prDir);
+        writeFileSync(join(prDir, "feature.txt"), "merged via PR\n");
+        git(["add", "feature.txt"], prDir);
+        git(["commit", "-q", "-m", "feat: merged on GitHub"], prDir);
+        git(["push", "-q"], prDir);
+
+        // Meanwhile the nightly backup commits locally in the deploy clone.
+        mkdirSync(join(deployDir, "data", "events"), { recursive: true });
+        writeFileSync(join(deployDir, "data", "events", "backup-log.txt"), "ran\n");
+        git(["add", "data/events/backup-log.txt"], deployDir);
+        git(["commit", "-q", "-m", "chore: backup ran"], deployDir);
+
+        // A bare `git push` here would be rejected as non-fast-forward.
+        expect(() => git(["push", "-q"], deployDir)).toThrow();
+
+        rebaseThenPush(deployDir);
+
+        // Origin now has BOTH commits — the PR merge and the backup.
+        const originLog = git(["log", "main", "--format=%s"], originDir);
+        expect(originLog).toContain("chore: backup ran");
+        expect(originLog).toContain("feat: merged on GitHub");
+      } finally {
+        rmSync(scratchDir, { recursive: true, force: true });
+      }
+    });
+
+    it("aborts a conflicted rebase and rethrows, leaving the clone in a normal state for the next run", () => {
+      const scratchDir = mkdtempSync(join(tmpdir(), "shizi-backup-conflict-test-"));
+      try {
+        const originDir = join(scratchDir, "origin.git");
+        mkdirSync(originDir);
+        git(["init", "-q", "--bare", "--initial-branch=main", originDir], scratchDir);
+
+        const deployDir = join(scratchDir, "deploy");
+        git(["clone", "-q", originDir, deployDir], scratchDir);
+        initScratchRepo(deployDir);
+        mkdirSync(join(deployDir, "data", "events"), { recursive: true });
+        writeFileSync(join(deployDir, "data", "events", "backup-log.txt"), "baseline\n");
+        git(["add", "data/events/backup-log.txt"], deployDir);
+        git(["commit", "-q", "-m", "baseline log"], deployDir);
+        git(["push", "-q", "-u", "origin", "main"], deployDir);
+
+        // Should never happen in practice (nothing else writes
+        // data/events/*), but if it does: conflicting edits to the same
+        // file on both sides.
+        const prDir = join(scratchDir, "pr");
+        git(["clone", "-q", originDir, prDir], scratchDir);
+        git(["config", "user.email", "test@example.com"], prDir);
+        git(["config", "user.name", "Test"], prDir);
+        writeFileSync(join(prDir, "data", "events", "backup-log.txt"), "edited remotely\n");
+        git(["add", "data/events/backup-log.txt"], prDir);
+        git(["commit", "-q", "-m", "remote edit"], prDir);
+        git(["push", "-q"], prDir);
+
+        writeFileSync(join(deployDir, "data", "events", "backup-log.txt"), "edited locally\n");
+        git(["add", "data/events/backup-log.txt"], deployDir);
+        git(["commit", "-q", "-m", "local edit"], deployDir);
+
+        expect(() => rebaseThenPush(deployDir)).toThrow();
+
+        // The failed rebase was aborted — no rebase state left behind, so
+        // the NEXT nightly run isn't wedged by this one's failure.
+        expect(existsSync(join(deployDir, ".git", "rebase-merge"))).toBe(false);
+        expect(existsSync(join(deployDir, ".git", "rebase-apply"))).toBe(false);
+        expect(() => assertCleanOutsideExport(deployDir)).not.toThrow();
+      } finally {
+        rmSync(scratchDir, { recursive: true, force: true });
+      }
     });
 
     it("still commits (only the run log) and is distinguishable from silence when nothing changed", () => {

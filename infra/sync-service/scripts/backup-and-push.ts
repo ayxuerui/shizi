@@ -74,6 +74,33 @@ export function assertCleanOutsideExport(repoRoot: string): void {
   if (status.length > 0) throw new DirtyCloneError(status);
 }
 
+/**
+ * Rebase onto the remote, then push. A bare `git push` assumed this
+ * clone was `main`'s only writer, but every PR merged on GitHub moves
+ * `origin/main` independently — after which every nightly push is
+ * rejected as non-fast-forward and backups silently pile up locally
+ * (found the hard way: six days of unpushed backup commits, 2026-08-23
+ * to -29). Rebasing is safe here by construction: backup commits touch
+ * only `data/events/*`, which no other writer edits. If a conflict ever
+ * does happen, the rebase is aborted so the clone is left in a normal
+ * state for the next run, and the error propagates — a loud failure in
+ * `docker logs`, per the spec's "distinguishable from silence" rule.
+ */
+export function rebaseThenPush(repoRoot: string): void {
+  try {
+    git(["pull", "--rebase"], repoRoot);
+  } catch (err) {
+    try {
+      git(["rebase", "--abort"], repoRoot);
+    } catch {
+      // No rebase was in progress — the pull failed before rebasing
+      // started (e.g. the remote was unreachable). Nothing to clean up.
+    }
+    throw err;
+  }
+  git(["push"], repoRoot);
+}
+
 export interface RunBackupOptions {
   repoRoot: string;
   dbPath: string;
@@ -148,7 +175,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         `${result.eventsCount} events, ${result.ratingsCount} ratings.`,
     );
     if (!noPush) {
-      git(["push"], DEFAULT_REPO_ROOT);
+      rebaseThenPush(DEFAULT_REPO_ROOT);
       console.log("Pushed.");
     }
   } catch (err) {

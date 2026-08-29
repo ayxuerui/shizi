@@ -248,6 +248,13 @@ then commit and push only if the export actually changed — and even when it di
 line to `data/events/backup-log.txt` so a quiet week and a stalled job are never confused with
 each other.
 
+The push **rebases onto `origin/main` first** (`rebaseThenPush` in `backup-and-push.ts`):
+every PR merged on GitHub moves `main` independently of the deploy clone, and a bare `git push`
+after that is rejected as non-fast-forward — which once left six days of backup commits stranded
+locally while the log looked healthy. Backup commits touch only `data/events/*`, so the rebase
+is conflict-free in practice; if it ever does conflict, it aborts cleanly and the run fails
+loudly in `docker logs shizi-backup-cron`.
+
 **Why a container instead of the host's own crontab** (which is how this was first built and
 verified — see `openspec/changes/harden-event-store/design.md` for the full account): this
 project's other infrastructure (`gateway`, `sync`) is already fully containerized, and a host
