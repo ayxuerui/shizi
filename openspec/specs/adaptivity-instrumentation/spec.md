@@ -2,15 +2,15 @@
 
 ## Purpose
 
-Captures the event data, randomized assignments, and parent feedback required for future adaptive modeling of learning modality effectiveness, without performing any such inference itself — because at the data volumes available in the first months, premature model-fitting would learn noise rather than signal.
+Captures the event data, randomized assignments, and parent feedback required for future adaptive modeling of teaching-activity effectiveness, without performing any such inference itself — because at the data volumes available in the first months, premature model-fitting would learn noise rather than signal.
 
 ## Requirements
 
 ### Requirement: Full-coverage event logging
-Every learner-facing activity built in this change (currently: the assessment) SHALL log its interactions using the complete event schema defined by the learner-state capability, including contextual fields not yet used by any live adaptation logic (time of day, adult-presence flag, position within session). Logging SHALL NOT be deferred until a consuming model exists.
+Every learner-facing module built in this change (currently: the assessment) SHALL log its interactions using the complete event schema defined by the learner-state capability, including contextual fields not yet used by any live adaptation logic (time of day, adult-presence flag, position within session). Logging SHALL NOT be deferred until a consuming model exists.
 
 #### Scenario: Contextual field logged before it has a consumer
-- **WHEN** an activity records an interaction event
+- **WHEN** a module records an interaction event
 - **THEN** it SHALL populate time-of-day, adult-presence, and session-position fields even though no logic in this change yet reads them for adaptation
 
 ### Requirement: Matched-pair randomization protocol
@@ -25,7 +25,10 @@ The system SHALL support assigning a not-yet-known character to one of a configu
 - **THEN** the assignment record SHALL be written immediately, not deferred until a learning outcome is observed
 
 ### Requirement: No inference performed in this change
-The system SHALL NOT compute or surface any per-modality effectiveness estimate, retention-model output, or routing decision based on the logged data in this change. Data collection and randomization SHALL be fully separated from any future inference component.
+
+The system SHALL NOT compute or surface any per-activity teaching-effectiveness estimate,
+retention-model output, or routing decision based on the logged data in this change. Data
+collection and randomization SHALL be fully separated from any future inference component.
 
 #### Scenario: Modality comparison data collected without a comparison result
 - **WHEN** matched-pair assignments and their associated events accumulate over multiple sessions

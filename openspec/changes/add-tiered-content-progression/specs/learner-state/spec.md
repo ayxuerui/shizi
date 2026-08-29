@@ -33,7 +33,7 @@ Every learner-interaction event SHALL record, at minimum: a unique event identif
 - **THEN** the two events SHALL be attributed to distinct units, and exposure counts for one SHALL NOT include interactions with the other
 
 ### Requirement: Known-set and mastery projection
-The system SHALL derive, for every unit in every candidate pool, a mastery state of `unseen`, `probing`, `known`, or `shaky`, computed from the event log and tracked independently per tier. A unit SHALL transition to `known` only after at least two consecutive correct responses with response latency below the configured guess-detection threshold. A unit previously `known` SHALL transition to `shaky` on any incorrect response or any correct response with latency above the configured slow-response threshold. Latency thresholds SHALL be configurable per tier, since a longer unit takes longer to read without indicating weaker recognition.
+The system SHALL derive, for every unit in every candidate pool, a mastery state of `unseen`, `probing`, `known`, or `shaky`, computed from the event log and tracked independently per tier. A unit SHALL transition to `known` only after at least two consecutive correct responses with response latency below the configured guess-detection threshold. A unit previously `known` SHALL transition to `shaky` on any incorrect response or any correct response with latency above the configured slow-response threshold. Latency thresholds SHALL be configurable per tier, since a longer unit takes longer to read without indicating weaker recognition. Only recognition-activity evidence SHALL count toward promotion; teaching activities SHALL never promote a unit toward `known`, whatever their outcome.
 
 #### Scenario: Two fast correct responses promote to known
 - **WHEN** a unit has at least two consecutive correct responses, each with latency below the guess-detection threshold configured for its tier
@@ -54,3 +54,8 @@ The system SHALL derive, for every unit in every candidate pool, a mastery state
 #### Scenario: Known set is queryable per tier
 - **WHEN** a caller requests the learner's known set for a given tier
 - **THEN** the result SHALL contain only units of that tier
+
+#### Scenario: Teaching activities do not promote mastery
+- **WHEN** a unit's event history contains only teaching (non-recognition) activities
+- **THEN** the unit has no mastery-projection entry at all, regardless of how many events
+  or how fast their outcomes were

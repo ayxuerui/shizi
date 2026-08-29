@@ -1,5 +1,3 @@
-import type { Arm, MatchCriteria } from "@shizi/adaptivity";
-import { DEFAULT_MATCH_CRITERIA } from "@shizi/adaptivity";
 import type { LearnerEvent, MasteryState, Outcome } from "@shizi/learner-state";
 import { DEFAULT_MASTERY_CONFIG } from "@shizi/learner-state";
 import { DEFAULT_CALIBRATION_CONFIG, type CalibrationConfig } from "./calibration.js";
@@ -17,7 +15,7 @@ export interface ProbeItem {
 
 export type NextProbeResult =
   | { status: "probe"; probe: ProbeItem }
-  | { status: "session-complete"; reason: "duration" | "item-count" };
+  | { status: "session-complete"; reason: "duration" | "item-count" | "focus-resolved" };
 
 export interface RecordResponseInput {
   character: string;
@@ -43,9 +41,6 @@ export interface AssessmentSessionConfig {
   maxItems: number;
   /** Options presented per probe, including the target (design.md's "3-4 option layout"). */
   optionCount: number;
-  /** Arms matched pairs may be assigned to (adaptivity-instrumentation) — this change ships exactly one, "hear-tap". */
-  arms: readonly Arm[];
-  matchCriteria: MatchCriteria;
   /** Every Nth informative slot is reserved for an identity/shaky probe — `assessment` spec's "Identity and previously-flagged characters are probed too" scenario. */
   identityAndShakyEveryNInformativeSlots: number;
 }
@@ -60,8 +55,6 @@ export const DEFAULT_ASSESSMENT_SESSION_CONFIG: AssessmentSessionConfig = {
   maxDurationMs: 90_000,
   maxItems: 30,
   optionCount: 4,
-  arms: ["hear-tap"],
-  matchCriteria: DEFAULT_MATCH_CRITERIA,
   identityAndShakyEveryNInformativeSlots: 3,
 };
 
@@ -80,6 +73,6 @@ export interface SessionDeps {
    * package goes through this, per this project's determinism discipline
    * (see `@shizi/adaptivity`'s `AssignmentDeps`). */
   random: () => number;
-  /** Client-generated idempotency key for `LearnerEvent.id` / assignment records. */
+  /** Client-generated idempotency key for `LearnerEvent.id`. */
   newId: () => string;
 }

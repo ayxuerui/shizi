@@ -18,7 +18,7 @@ export interface BoutState {
   probe: ProbeItem | null;
   selected: string | null;
   cue: ResponseCue | null;
-  completionReason: "duration" | "item-count" | null;
+  completionReason: "duration" | "item-count" | "focus-resolved" | null;
   ratingPhase: "asking" | "settled";
 }
 
@@ -34,7 +34,7 @@ export const INITIAL_BOUT_STATE: BoutState = {
 
 export type BoutAction =
   | { type: "PROBE_READY"; probe: ProbeItem }
-  | { type: "SESSION_COMPLETE"; reason: "duration" | "item-count" }
+  | { type: "SESSION_COMPLETE"; reason: "duration" | "item-count" | "focus-resolved" }
   | { type: "RESPONDED"; selected: string; correct: boolean }
   | { type: "RATED" }
   | { type: "RATING_SKIPPED" };

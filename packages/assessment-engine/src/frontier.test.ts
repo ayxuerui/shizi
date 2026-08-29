@@ -21,7 +21,7 @@ function event(overrides: Partial<LearnerEvent>): LearnerEvent {
     timestamp: "2026-08-19T09:00:00.000Z",
     sessionId: "s1",
     character: "x",
-    modality: "hear-tap",
+    module: "assess", activity: "hear-tap",
     outcome: "correct",
     latencyMs: 500,
     positionInSession: 0,

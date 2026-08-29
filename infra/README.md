@@ -183,10 +183,14 @@ day-to-day operating summary.
    token must not open production, and vice versa.
 2. Copy `apps/assessment/.env.dev.example` to `apps/assessment/.env.dev`; set `VITE_SYNC_TOKEN`
    to match step 1.
-3. Build with the dev flag: `npm run build --workspace=apps/assessment -- --mode dev`. This is
+3. Build with the dev flag: `(cd apps/assessment && npx vite build --mode dev && node
+   scripts/check-precache.mjs)`. This is
    what makes the build identifiable on-device — the PWA installs as "shizi dev" instead of
    "shizi", and the unlock/diagnostics screens show a small `DEV` marker (never inside the bout
    itself). A build without `--mode dev` is indistinguishable from production once installed.
+   Note: `npm run build --workspace=apps/assessment -- --mode dev` does NOT work — npm appends
+   the flag to the end of the whole `&&`-chained script, where vite never sees it, and the
+   build ships with production identity.
 4. `docker compose -f docker-compose.dev.yml up -d --build` from the repo root.
 5. **Your own action, outside this repo, once only:** add a `shizi-dev.realxco.com` public
    hostname in the Cloudflare Zero Trust dashboard targeting `http://shizi-gateway-dev:80`.

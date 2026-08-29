@@ -8,8 +8,8 @@ import {
 } from "@shizi/assessment-engine";
 import type { CandidatePool } from "@shizi/character-data";
 import type { LearnerEvent } from "@shizi/learner-state";
-import type { ArmAssignment, Rating, SessionRating } from "@shizi/adaptivity";
-import { enqueueAssignments, enqueueEvent, enqueueRating, loadPriorEvents } from "../offline/event-queue.js";
+import type { Rating, SessionRating } from "@shizi/adaptivity";
+import { enqueueEvent, enqueueRating, loadPriorEvents } from "../offline/event-queue.js";
 import { flushQueue } from "../offline/sync.js";
 import { boutReducer, INITIAL_BOUT_STATE, type BoutState } from "./bout-machine.js";
 import { createSessionClock } from "./session-clock.js";
@@ -25,10 +25,6 @@ async function defaultOnEvent(event: LearnerEvent): Promise<void> {
   void flushQueue(); // fire-and-forget — a sync failure must never block or surface to the child.
 }
 
-async function defaultOnAssignments(assignments: readonly ArmAssignment[]): Promise<void> {
-  await enqueueAssignments(assignments);
-}
-
 async function defaultOnRating(rating: SessionRating): Promise<void> {
   await enqueueRating(rating);
   void flushQueue(); // fire-and-forget, same discipline as defaultOnEvent.
@@ -37,6 +33,11 @@ async function defaultOnRating(rating: SessionRating): Promise<void> {
 export interface UseAssessmentSessionOptions {
   sessionId: string;
   pool: CandidatePool;
+  /** Restricts informative probes to these characters — the active
+   * batch's unresolved members, per the `learning-orchestration` spec.
+   * Omitted (or empty) runs an unfocused, whole-pool bout, exactly as
+   * every session behaved before this option existed. */
+  focusCharacters?: readonly string[];
   config?: AssessmentSessionConfig;
   deps?: Partial<SessionDeps>;
   /** Defaults to loading this device's local history from the offline
@@ -45,7 +46,6 @@ export interface UseAssessmentSessionOptions {
   /** Clock for latency measurement — defaults to `performance.now()`; tests inject a scripted sequence. */
   nowMs?: () => number;
   onEvent?: (event: LearnerEvent) => void | Promise<void>;
-  onAssignments?: (assignments: readonly ArmAssignment[]) => void | Promise<void>;
   onRating?: (rating: SessionRating) => void | Promise<void>;
 }
 
@@ -72,8 +72,8 @@ export interface UseAssessmentSessionResult {
  * The composition seam between `AssessmentSession` (the headless engine,
  * Pass 1) and this app's UI. Builds exactly ONE `AssessmentSession` per
  * mount via a `useRef` guard — not a `useState` initializer, which React
- * 18 StrictMode double-invokes and would build two engines with two
- * independent `AssignmentLog`s (see `initializedRef` below).
+ * 18 StrictMode double-invokes and would build two independent engines
+ * (see `initializedRef` below).
  *
  * `classification`/`masteryState` from `recordResponse` are read and
  * immediately discarded here — they never enter `BoutState`, which is
@@ -84,12 +84,12 @@ export function useAssessmentSession(options: UseAssessmentSessionOptions): UseA
   const {
     sessionId,
     pool,
+    focusCharacters,
     config,
     deps,
     loadPriorEvents: loadPriorEventsImpl = loadPriorEvents,
     nowMs = () => performance.now(),
     onEvent = defaultOnEvent,
-    onAssignments = defaultOnAssignments,
     onRating = defaultOnRating,
   } = options;
 
@@ -135,8 +135,6 @@ export function useAssessmentSession(options: UseAssessmentSessionOptions): UseA
       dispatch({ type: "PROBE_READY", probe: result.probe });
     } else {
       dispatch({ type: "SESSION_COMPLETE", reason: result.reason });
-      const assignments = session.getAssignments();
-      if (assignments.length > 0) void onAssignments(assignments);
     }
   }
 
@@ -152,6 +150,7 @@ export function useAssessmentSession(options: UseAssessmentSessionOptions): UseA
         sessionId,
         pool,
         priorEvents,
+        ...(focusCharacters ? { focusCharacters } : {}),
         ...(config ? { config } : {}),
         deps: { ...deps, elapsedMs: clock.elapsedMs },
       });

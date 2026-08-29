@@ -1,4 +1,7 @@
-import { REQUIRED_EVENT_FIELDS, type LearnerEvent } from "./types.js";
+import { REQUIRED_EVENT_FIELDS, type LearnerActivity, type LearnerEvent, type LearnerModule } from "./types.js";
+
+const LEARNER_MODULES: readonly LearnerModule[] = ["learn", "assess", "review"];
+const LEARNER_ACTIVITIES: readonly LearnerActivity[] = ["listen", "trace", "hear-tap"];
 
 export interface ValidationResult {
   valid: boolean;
@@ -45,8 +48,17 @@ export function validateEvent(event: unknown): ValidationResult {
   if (typeof typed.character !== "string" || typed.character.length === 0) {
     errors.push("character must be a non-empty string");
   }
-  if (typeof typed.modality !== "string" || typed.modality.length === 0) {
-    errors.push("modality must be a non-empty string");
+  if (typeof typed.module !== "string" || !LEARNER_MODULES.includes(typed.module as LearnerModule)) {
+    errors.push('module must be "learn", "assess", or "review"');
+  }
+  if (typeof typed.activity !== "string" || !LEARNER_ACTIVITIES.includes(typed.activity as LearnerActivity)) {
+    errors.push('activity must be "listen", "trace", or "hear-tap"');
+  }
+  if ("modality" in record) {
+    // Retired field name (`rename-event-modality-to-activity`) — a row
+    // still carrying it is pre-migration data that must be translated
+    // before it is valid, not silently accepted.
+    errors.push('retired field: "modality" (renamed to "activity" with module/activity values)');
   }
   if (typed.outcome !== "correct" && typed.outcome !== "incorrect") {
     errors.push('outcome must be "correct" or "incorrect"');

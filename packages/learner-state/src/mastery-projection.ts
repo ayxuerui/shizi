@@ -1,8 +1,24 @@
 import type { LearnerEvent, MasteryState } from "./types.js";
 
+/**
+ * Activities whose outcomes count as evidence of character *recognition*.
+ * Owned here (not by whichever engine happens to write the event) so the
+ * exclusion is structural. `hear-tap` is the only recognition activity
+ * (assessment and review both use it); `listen` and `trace` are teaching
+ * interactions — the exposure module's arms — and must never promote a
+ * character to `known`. The old `expose-*` modality identifiers' guard
+ * (add-tracing-modality-arm design.md) is subsumed by the module/activity
+ * taxonomy itself: see `rename-event-modality-to-activity` design
+ * decision 2.
+ */
+export const DEFAULT_RECOGNITION_ACTIVITIES: ReadonlySet<string> = new Set(["hear-tap"]);
+
 export interface MasteryProjectionConfig {
   /** Below this latency, a correct response counts as a genuine (non-guess) hit. */
   guessDetectionThresholdMs: number;
+  /** Only events whose `activity` is in this set count toward the
+   * consecutive-correct/miss streak. Defaults to `DEFAULT_RECOGNITION_ACTIVITIES`. */
+  recognitionActivities?: ReadonlySet<string>;
 }
 
 export const DEFAULT_MASTERY_CONFIG: MasteryProjectionConfig = {
@@ -11,6 +27,7 @@ export const DEFAULT_MASTERY_CONFIG: MasteryProjectionConfig = {
   // hard-coding it, since design.md explicitly expects it to be tuned
   // after observing real sessions.
   guessDetectionThresholdMs: 2000,
+  recognitionActivities: DEFAULT_RECOGNITION_ACTIVITIES,
 };
 
 /**
@@ -31,8 +48,11 @@ export function computeMasteryStates(
   events: readonly LearnerEvent[],
   config: MasteryProjectionConfig = DEFAULT_MASTERY_CONFIG,
 ): Map<string, MasteryState> {
+  const recognitionActivities = config.recognitionActivities ?? DEFAULT_RECOGNITION_ACTIVITIES;
+  const recognitionEvents = events.filter((event) => recognitionActivities.has(event.activity));
+
   const byCharacter = new Map<string, LearnerEvent[]>();
-  for (const event of events) {
+  for (const event of recognitionEvents) {
     if (!byCharacter.has(event.character)) {
       byCharacter.set(event.character, []);
     }

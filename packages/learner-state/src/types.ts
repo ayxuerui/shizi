@@ -1,11 +1,26 @@
 /**
  * Outcome of a single character-recognition interaction. This schema is
  * specifically for character-interaction events (assessment probes,
- * future tracing/word-building arms) — not a general-purpose event bus.
+ * exposure teaching interactions, review responses) — not a
+ * general-purpose event bus.
  */
 export type Outcome = "correct" | "incorrect";
 
 export type MasteryState = "unseen" | "probing" | "known" | "shaky";
+
+/**
+ * The module that produced an event — the rotating pedagogical unit
+ * (see `add-activity-mode-indicator` design decision 1 for the
+ * module/activity vocabulary).
+ */
+export type LearnerModule = "learn" | "assess" | "review";
+
+/**
+ * The concrete interaction the learner performed within a module.
+ * `listen`/`trace` are teaching activities (they never promote mastery);
+ * `hear-tap` is recognition evidence.
+ */
+export type LearnerActivity = "listen" | "trace" | "hear-tap";
 
 /**
  * A single learner-interaction event, per `learner-state` spec's "Event
@@ -20,8 +35,10 @@ export interface LearnerEvent {
   timestamp: string;
   sessionId: string;
   character: string;
-  /** e.g. "hear-tap" (this change's only modality); extensible for future arms. */
-  modality: string;
+  /** The module that produced this event. */
+  module: LearnerModule;
+  /** The interaction the learner performed, e.g. "hear-tap". */
+  activity: LearnerActivity;
   outcome: Outcome;
   latencyMs: number;
   /** 0-indexed position of this interaction within its session. */
@@ -43,7 +60,8 @@ export const REQUIRED_EVENT_FIELDS: ReadonlyArray<keyof LearnerEvent> = [
   "timestamp",
   "sessionId",
   "character",
-  "modality",
+  "module",
+  "activity",
   "outcome",
   "latencyMs",
   "positionInSession",

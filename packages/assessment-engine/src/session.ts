@@ -1,6 +1,5 @@
 import type { CandidatePool } from "@shizi/character-data";
-import { buildConfusabilityIndex, computeConfusability, IDENTITY_CHARACTERS, isUsable } from "@shizi/character-data";
-import { assignPairToArms, AssignmentLog, findMatchedPairs, type ArmAssignment } from "@shizi/adaptivity";
+import { buildConfusabilityIndex, computeConfusability, IDENTITY_CHARACTERS } from "@shizi/character-data";
 import {
   computeKnownSet,
   computeMasteryStates,
@@ -24,13 +23,20 @@ import {
   type SessionDeps,
 } from "./types.js";
 
-const MODALITY = "hear-tap"; // this change's only implemented modality — see adaptivity-instrumentation spec.
+const MODULE = "assess";
+const ACTIVITY = "hear-tap"; // the recognition activity — see adaptivity-instrumentation spec.
 
 export interface CreateAssessmentSessionOptions {
   sessionId: string;
   pool: CandidatePool;
   /** This learner's full historical event log (all prior sessions) — used to seed the frontier bracket and compute prior-exposure/days-since-last-exposure. Empty for a brand-new learner. */
   priorEvents?: readonly LearnerEvent[];
+  /** When supplied (non-empty), restricts frontier-derived informative
+   * probes to this set — `assessment` spec's "Focused probing scope"
+   * requirement. Dilution, forced identity/shaky slots, and distractor
+   * generation are unaffected. Absent or empty means no focus, matching
+   * every session's behavior before this option existed. */
+  focusCharacters?: readonly string[];
   config?: AssessmentSessionConfig;
   deps?: Partial<SessionDeps>;
 }
@@ -39,12 +45,17 @@ export interface CreateAssessmentSessionOptions {
  * Orchestrates one assessment bout end-to-end: adaptive frontier-search
  * probe selection (8.4), guess-detection-aware event emission (8.5, 8.12),
  * felt-difficulty dilution (8.6), Loop 4 difficulty calibration (8.7),
- * session bounding (8.10), and matched-pair arm assignment (8.13).
+ * session bounding (8.10).
+ *
+ * Matched-pair arm assignment (originally 8.13) no longer happens here —
+ * `add-tracing-modality-arm` design.md's "Arm assignment moves from probe
+ * time to introduction time" moved it to `@shizi/exposure-engine`, since
+ * frontier search here often probes a character that turns out to
+ * already be known and is never introduced through exposure at all.
  *
  * Deterministic given the same `priorEvents`, `config`, and `deps` —
  * every source of randomness or wall-clock time is injected, never read
- * directly (see `SessionDeps` and `@shizi/adaptivity`'s `AssignmentDeps`
- * precedent this follows).
+ * directly (see `SessionDeps`).
  */
 export class AssessmentSession {
   readonly sessionId: string;
@@ -53,8 +64,9 @@ export class AssessmentSession {
   private readonly config: AssessmentSessionConfig;
   private readonly deps: SessionDeps;
   private readonly priorEvents: readonly LearnerEvent[];
+  /** Null means no focus — every existing session behaves exactly as before. */
+  private readonly focusCharacters: ReadonlySet<string> | null;
   private readonly eventLog = new EventLog();
-  private readonly assignmentLog = new AssignmentLog();
   private readonly difficultyIndex: ReadonlyMap<string, number>;
   private readonly confusabilityIndex: ReadonlyMap<string, ReadonlySet<string>>;
   private readonly startElapsedMs: number;
@@ -71,6 +83,8 @@ export class AssessmentSession {
     this.sessionId = options.sessionId;
     this.pool = options.pool;
     this.priorEvents = options.priorEvents ?? [];
+    this.focusCharacters =
+      options.focusCharacters && options.focusCharacters.length > 0 ? new Set(options.focusCharacters) : null;
     this.config = options.config ?? DEFAULT_ASSESSMENT_SESSION_CONFIG;
     // Same lazy-default idiom as @shizi/adaptivity's AssignmentDeps: real
     // usage gets real wall-clock/randomness by default, tests override
@@ -110,6 +124,17 @@ export class AssessmentSession {
       guessDetectionThresholdMs: this.config.guessDetection.fastThresholdMs,
     });
     const knownSet = computeKnownSet(masteryStates);
+
+    // Per `assessment` spec's "Bout concludes when the focused set is
+    // resolved" scenario: "resolved" is exactly what disqualifies a
+    // character from further frontier probing — confirmed known, or
+    // demoted to shaky and so excluded from `buildFrontierCandidates`
+    // (which treats `knownSet` as already-resolved) by that same
+    // exclusion, i.e. no longer `unseen`/`probing`.
+    if (this.focusCharacters && [...this.focusCharacters].every((character) => knownSet.has(character))) {
+      return { status: "session-complete", reason: "focus-resolved" };
+    }
+
     const shakyCharacters = [...masteryStates.entries()]
       .filter(([, state]) => state === "shaky")
       .map(([character]) => character);
@@ -125,7 +150,6 @@ export class AssessmentSession {
     }
 
     const kind: ProbeKind = character !== null ? "easy" : "informative";
-    let isFirstEverExposure = false;
 
     if (character === null) {
       const forceIdentityOrShaky =
@@ -136,12 +160,18 @@ export class AssessmentSession {
         character = identityAndShakyPool[this.identityAndShakyCursor % identityAndShakyPool.length]!;
         this.identityAndShakyCursor += 1;
       } else {
-        const candidates = buildFrontierCandidates(this.pool, knownSet, this.difficultyIndex);
+        const frontierCandidates = buildFrontierCandidates(this.pool, knownSet, this.difficultyIndex);
+        // Only the informative-probe candidate list narrows under focus —
+        // dilution, forced identity/shaky slots, distractor generation,
+        // and the bracket bounds below all keep drawing from their
+        // existing, broader sources (spec's "Focused probing scope").
+        const candidates = this.focusCharacters
+          ? frontierCandidates.filter((candidate) => this.focusCharacters!.has(candidate.character))
+          : frontierCandidates;
         const bounds = computeFrontierBounds(events, knownSet, this.difficultyIndex);
         const picked = selectNextFrontierProbe(candidates, bounds, this.informativeSlotsServed);
         if (picked) {
           character = picked.character;
-          isFirstEverExposure = events.every((event) => event.character !== character);
         } else if (identityAndShakyPool.length > 0) {
           // Frontier genuinely exhausted (every usable candidate is
           // known) — fall back to identity/shaky rotation rather than
@@ -160,10 +190,6 @@ export class AssessmentSession {
       return { status: "session-complete", reason: "item-count" };
     }
 
-    if (isFirstEverExposure) {
-      this.recordMatchedPairAssignment(character, knownSet);
-    }
-
     const distractorCount = Math.max(0, this.config.optionCount - 1);
     const distractors = pickDistractors(
       character,
@@ -179,35 +205,6 @@ export class AssessmentSession {
     this.probesIssued += 1;
 
     return { status: "probe", probe: { character, kind, options } };
-  }
-
-  /**
-   * Per `adaptivity-instrumentation` spec: pairs and randomly assigns
-   * arms BEFORE the outcome is known — called from `nextProbe`, at
-   * presentation time, not from `recordResponse`. Only fires for a
-   * genuinely first-ever exposure to a usable, not-yet-known productive
-   * candidate (identity/shaky-forced picks never reach here — they lack
-   * a `frequencyRank`, so `isMatchedPair` can never match them anyway;
-   * see `character-data`'s exclusion.ts).
-   */
-  private recordMatchedPairAssignment(character: string, knownSet: ReadonlySet<string>): void {
-    const notYetKnownUsable = [character];
-    for (const [candidate, attributes] of this.pool) {
-      if (candidate === character) continue;
-      if (knownSet.has(candidate)) continue;
-      if (!isUsable(attributes)) continue;
-      notYetKnownUsable.push(candidate);
-    }
-
-    const pairs = findMatchedPairs(this.pool, notYetKnownUsable, this.confusabilityIndex, this.config.matchCriteria);
-    const pair = pairs.find((p) => p.characters.includes(character));
-    if (!pair) return;
-
-    const assignments: [ArmAssignment, ArmAssignment] = assignPairToArms(pair, this.config.arms, {
-      now: this.deps.now,
-      random: this.deps.random,
-    });
-    this.assignmentLog.recordPair(assignments);
   }
 
   /**
@@ -244,7 +241,8 @@ export class AssessmentSession {
       timestamp: now,
       sessionId: this.sessionId,
       character: input.character,
-      modality: MODALITY,
+      module: MODULE,
+      activity: ACTIVITY,
       outcome: input.outcome,
       latencyMs: input.latencyMs,
       positionInSession: this.probesIssued - 1,
@@ -286,9 +284,5 @@ export class AssessmentSession {
   /** This session's events only (not prior history) — the caller flushes these to the durable event log. */
   getEvents(): readonly LearnerEvent[] {
     return this.eventLog.getEvents();
-  }
-
-  getAssignments(): readonly ArmAssignment[] {
-    return this.assignmentLog.getAssignments();
   }
 }

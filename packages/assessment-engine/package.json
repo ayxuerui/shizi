@@ -10,7 +10,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@shizi/adaptivity": "*",
     "@shizi/character-data": "*",
     "@shizi/curriculum": "*",
     "@shizi/learner-state": "*"

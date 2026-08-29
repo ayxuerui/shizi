@@ -17,6 +17,7 @@
     "@shizi/curriculum": "*",
     "@shizi/learner-state": "*",
     "@shizi/validator": "*",
+    "hanzi-writer": "^3.7.3",
     "idb": "^8.0.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

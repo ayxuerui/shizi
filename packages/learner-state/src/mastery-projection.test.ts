@@ -10,7 +10,8 @@ function event(overrides: Partial<LearnerEvent> = {}): LearnerEvent {
     timestamp: `2026-08-17T10:0${counter}:00.000Z`,
     sessionId: "session-1",
     character: "山",
-    modality: "hear-tap",
+    module: "assess",
+    activity: "hear-tap",
     outcome: "correct",
     latencyMs: 800,
     positionInSession: counter,
@@ -106,5 +107,38 @@ describe("computeMasteryStates (learner-state spec: 'Known-set and mastery proje
     expect(
       computeMasteryStates(events, { guessDetectionThresholdMs: 3000 }).get("山"),
     ).toBe("known"); // looser threshold now qualifies
+  });
+
+  describe("recognition-activity filter (add-tracing-modality-arm spec: 'Exposure outcome does not promote mastery state')", () => {
+    it("two fast-correct teaching (non-recognition) activities do not promote to known", () => {
+      const states = computeMasteryStates([
+        event({ module: "learn", activity: "listen", latencyMs: FAST }),
+        event({ module: "learn", activity: "trace", latencyMs: FAST }),
+      ]);
+      expect(states.has("山")).toBe(false); // no recognition events at all -> unseen, not even "probing"
+    });
+
+    it("a hear-tap (recognition) event still behaves exactly as before, alongside teaching events for the same character", () => {
+      const states = computeMasteryStates([
+        event({ module: "learn", activity: "listen", latencyMs: FAST }),
+        event({ activity: "hear-tap", latencyMs: FAST }),
+        event({ activity: "hear-tap", latencyMs: FAST }),
+      ]);
+      expect(states.get("山")).toBe("known"); // only the two hear-tap events count
+    });
+
+    it("recognitionActivities is configurable, not hard-coded", () => {
+      const events = [
+        event({ module: "learn", activity: "trace", latencyMs: FAST }),
+        event({ module: "learn", activity: "trace", latencyMs: FAST }),
+      ];
+      expect(computeMasteryStates(events).get("山")).toBeUndefined();
+      expect(
+        computeMasteryStates(events, {
+          guessDetectionThresholdMs: DEFAULT_MASTERY_CONFIG.guessDetectionThresholdMs,
+          recognitionActivities: new Set(["trace"]),
+        }).get("山"),
+      ).toBe("known");
+    });
   });
 });
