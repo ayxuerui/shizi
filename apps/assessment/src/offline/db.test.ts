@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { openDB, type IDBPDatabase } from "idb";
 import { __resetDBForTests, getDB, type StoredEvent } from "./db.js";
 import type { LearnerEvent } from "@shizi/learner-state";
+import type { SessionRating } from "@shizi/adaptivity";
 
 const DB_NAME = "shizi-assessment";
 
@@ -113,5 +114,73 @@ describe("offline db v3 upgrade (rename-event-modality-to-activity design decisi
     expect(rows).toHaveLength(1);
     expect(rows[0]!.event).toEqual(event);
     expect(rows[0]!.synced).toBe(false);
+  });
+});
+
+describe("offline db v4 upgrade (add-issue-reporting)", () => {
+  /** Opens the database at v3 — the shape a device on the previous build
+   * holds — with one event and one rating, then closes it so getDB()
+   * performs the v3→v4 upgrade itself. */
+  async function seedV3Database(): Promise<{ event: LearnerEvent; rating: SessionRating }> {
+    const event: LearnerEvent = {
+      id: "v3-event",
+      timestamp: "2026-08-28T10:00:00.000Z",
+      sessionId: "session-v3",
+      character: "山",
+      module: "assess",
+      activity: "hear-tap",
+      outcome: "correct",
+      latencyMs: 800,
+      positionInSession: 0,
+      priorExposureCount: 0,
+      daysSinceLastExposure: null,
+      timeOfDay: 10,
+      adultPresent: true,
+    };
+    const rating: SessionRating = { sessionId: "session-v3", rating: "fine", recordedAt: "2026-08-28T10:01:00.000Z" };
+    const db: IDBPDatabase = await openDB(DB_NAME, 3, {
+      upgrade(db) {
+        db.createObjectStore("events", { keyPath: "event.id" });
+        db.createObjectStore("assignments", { autoIncrement: true });
+        db.createObjectStore("ratings", { keyPath: "rating.sessionId" });
+      },
+    });
+    await db.put("events", { event, synced: true } as never);
+    await db.put("ratings", { rating, synced: true } as never);
+    expect(db.objectStoreNames.contains("issueReports")).toBe(false);
+    await db.close();
+    return { event, rating };
+  }
+
+  it("upgrading a v3 database preserves every existing row and gains the issueReports store", async () => {
+    const { event, rating } = await seedV3Database();
+
+    const db = await getDB();
+    expect(db.version).toBe(4);
+    expect(db.objectStoreNames.contains("issueReports")).toBe(true);
+    expect((await db.getAll("events")).map((r) => r.event)).toEqual([event]);
+    expect((await db.getAll("ratings")).map((r) => r.rating)).toEqual([rating]);
+    expect(await db.getAll("issueReports")).toEqual([]);
+  });
+
+  it("a fresh v4 database has the issueReports store keyed by report.id", async () => {
+    const db = await getDB();
+    const report = {
+      id: "report-1",
+      kind: "bug" as const,
+      message: "The audio did not play for 山.",
+      createdAt: "2026-08-29T10:00:00.000Z",
+      context: {
+        appEnv: "prod",
+        buildId: "abc1234",
+        userAgent: "Mozilla/5.0 (iPad)",
+        standalone: true,
+        online: false,
+        lastSessionId: null,
+        lastActivity: null,
+      },
+    };
+    await db.put("issueReports", { report, synced: false });
+    expect(await db.get("issueReports", "report-1")).toEqual({ report, synced: false });
   });
 });

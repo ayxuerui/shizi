@@ -1,7 +1,8 @@
 export interface SyncConfig {
   /** Base URL of the self-hosted sync service (`infra/sync-service`) —
    * e.g. the Cloudflare-tunnel hostname for it. `sync.ts` appends
-   * `/events`, `/assignments`, and `/ratings`, the service's three routes. */
+   * `/events`, `/assignments`, `/ratings`, and `/issue-reports`, the
+   * service's four routes. */
   endpoint: string;
   token: string | undefined;
 }

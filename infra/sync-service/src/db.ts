@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import DatabaseConstructor, { type Database } from "better-sqlite3";
 import type { LearnerEvent } from "@shizi/learner-state";
 import type { ArmAssignment, SessionRating } from "@shizi/adaptivity";
+import type { IssueReport, IssueReportContext } from "@shizi/issue-reports";
 
 /**
  * Task 9.2's event store, self-hosted SQLite instead of Cloudflare D1 —
@@ -49,6 +50,24 @@ CREATE TABLE IF NOT EXISTS ratings (
   session_id TEXT PRIMARY KEY,
   rating TEXT NOT NULL,
   recorded_at TEXT NOT NULL,
+  received_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- issue-reporting spec (add-issue-reporting): bug reports and feature
+-- requests filed by the accompanying adult. id is the client-generated
+-- idempotency key — the same INSERT OR IGNORE shape as events/ratings.
+-- context_json holds the whole IssueReportContext as ONE JSON column, not
+-- per-field columns: reports are read from the exported JSONL (jq), never
+-- via SQL against this file, so per-field columns would be schema churn
+-- with no reader (add-issue-reporting design.md, "context as one JSON
+-- column"). Added via CREATE TABLE IF NOT EXISTS only — no row migration,
+-- so SCHEMA_VERSION is untouched.
+CREATE TABLE IF NOT EXISTS issue_reports (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  message TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  context_json TEXT NOT NULL,
   received_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 `;
@@ -120,13 +139,33 @@ function rowToRating(row: RatingRow): SessionRating {
   };
 }
 
+interface IssueReportRow {
+  id: string;
+  kind: string;
+  message: string;
+  created_at: string;
+  context_json: string;
+}
+
+function rowToIssueReport(row: IssueReportRow): IssueReport {
+  return {
+    id: row.id,
+    kind: row.kind as IssueReport["kind"],
+    message: row.message,
+    createdAt: row.created_at,
+    context: JSON.parse(row.context_json) as IssueReportContext,
+  };
+}
+
 export interface EventStore {
   insertEvent(event: LearnerEvent): { inserted: boolean };
   insertAssignment(assignment: ArmAssignment): { inserted: boolean };
   insertRating(rating: SessionRating): { inserted: boolean };
+  insertIssueReport(report: IssueReport): { inserted: boolean };
   getAllEvents(): LearnerEvent[];
   getAllAssignments(): ArmAssignment[];
   getAllRatings(): SessionRating[];
+  getAllIssueReports(): IssueReport[];
   backup(destinationPath: string): Promise<void>;
   close(): void;
 }
@@ -236,9 +275,15 @@ export function openEventStore(path: string): EventStore {
     VALUES (@sessionId, @rating, @recordedAt)
   `);
 
+  const insertIssueReportStmt = db.prepare(`
+    INSERT OR IGNORE INTO issue_reports (id, kind, message, created_at, context_json)
+    VALUES (@id, @kind, @message, @createdAt, @contextJson)
+  `);
+
   const selectEventsStmt = db.prepare(`SELECT * FROM events ORDER BY timestamp ASC, id ASC`);
   const selectAssignmentsStmt = db.prepare(`SELECT * FROM assignments ORDER BY row_id ASC`);
   const selectRatingsStmt = db.prepare(`SELECT * FROM ratings ORDER BY recorded_at ASC, session_id ASC`);
+  const selectIssueReportsStmt = db.prepare(`SELECT * FROM issue_reports ORDER BY created_at ASC, id ASC`);
 
   return {
     insertEvent(event) {
@@ -289,6 +334,21 @@ export function openEventStore(path: string): EventStore {
 
     getAllRatings() {
       return (selectRatingsStmt.all() as RatingRow[]).map(rowToRating);
+    },
+
+    insertIssueReport(report) {
+      const result = insertIssueReportStmt.run({
+        id: report.id,
+        kind: report.kind,
+        message: report.message,
+        createdAt: report.createdAt,
+        contextJson: JSON.stringify(report.context),
+      });
+      return { inserted: result.changes > 0 };
+    },
+
+    getAllIssueReports() {
+      return (selectIssueReportsStmt.all() as IssueReportRow[]).map(rowToIssueReport);
     },
 
     async backup(destinationPath) {

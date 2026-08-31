@@ -28,6 +28,10 @@ self-hosted" decision entry for the full reasoning, including the SQLite backup 
     comment), and publishes the probe pool + difficulty params to
     `apps/assessment/public/config.json`, which `apps/assessment` fetches at startup (falling back
     to its own bundled pool if that fetch fails or the file doesn't exist yet).
+  - Routes: `POST /events`, `/assignments`, `/ratings`, and `/issue-reports` (add-issue-reporting)
+    — all NDJSON, all behind the same shared token, all idempotent on the record's own id. The
+    last one is the bug-report/feature-request form's destination; see "Bug reports and feature
+    requests" below.
 - `nginx-assessment.conf.template` — the routing rules for **both** deployments (task 9.1,
   extended by add-dev-deployment): serves the built `apps/assessment/dist` under a
   `/assessment/` path prefix, same pattern as `spikes/nginx-default.conf` plus a
@@ -145,6 +149,7 @@ Claude Code session worktree or any other throwaway checkout:
 cd ~/deploy/shizi
 git pull
 set -a; source ~/.config/shizi/prod.env; set +a
+export VITE_BUILD_ID=$(git rev-parse --short HEAD)   # stamps the build id into issue reports (add-issue-reporting)
 docker compose build gateway sync backup-cron
 docker tag shizi-gateway:latest shizi-gateway:$(date +%F)
 docker compose up -d gateway sync backup-cron
@@ -153,6 +158,12 @@ curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8081/assessment/   # e
 
 `backup-cron` doesn't need `VITE_SYNC_TOKEN` (it isn't in that build's `args:`), so it's harmless
 to include even though `prod.env` was sourced mainly for the gateway build above.
+
+`VITE_BUILD_ID` (add-issue-reporting) is what lets a bug report filed from the app say which build
+it came from — `.dockerignore` excludes `.git/`, so the image build cannot read the SHA itself and
+it has to arrive as a build arg. Forgetting the `export` is harmless: the build is still valid and
+reports carry `"unknown"` instead. Host builds (the dev ship loop) need nothing extra — `vite.config.ts`
+runs `git rev-parse` itself when `.git/` is present.
 
 **Rolling back** to the previous release:
 
@@ -234,8 +245,8 @@ keep.
 
 ## Backing up the event store
 
-`data/events/events.jsonl` (and `ratings.jsonl`), committed to git via `pull-events.ts`, is the
-actual durable copy — not the live SQLite file. The `sync-service` also takes its own local
+`data/events/events.jsonl` (and `ratings.jsonl`, `issue-reports.jsonl`), committed to git via
+`pull-events.ts`, is the actual durable copy — not the live SQLite file. The `sync-service` also takes its own local
 snapshot every 6 hours (`sync-service/src/backup.ts`, kept alongside the live file) as cheap
 insurance against corruption between pulls — that snapshot does **not** survive a lost disk on
 its own; true off-site backup would need external storage credentials nobody has supplied, and
@@ -296,3 +307,39 @@ nothing to back up in dev's `dev-events-data` volume — tearing it down loses n
 
 **Superseded:** `automate-event-log-backup` proposed this same backup goal around a `systemd
 --user` timer; it was never implemented and is replaced by `harden-event-store`.
+
+## Bug reports and feature requests
+
+(`add-issue-reporting`.) The app has an adult-facing form for filing a bug report or a feature
+request, and reports ride the same pipeline as learner events: local outbox on the device →
+`POST /issue-reports` on the sync service → SQLite → `pull-events.ts` →
+**`data/events/issue-reports.jsonl`**, committed nightly by `backup-cron` alongside
+`events.jsonl`/`ratings.jsonl`. No dashboard, no new service, no new credential.
+
+**Reaching the form on the iPad** (no address bar in standalone mode): cold start → long-press the
+bottom-right corner of the unlock screen (the diagnostics entry) → **Report a problem or idea**.
+Pick "Something went wrong" or "I have an idea", type, **Save report**. Saving works offline — the
+report is stored on the device and sent on the next sync opportunity, and the form shows how many
+are still waiting. For desk testing in a normal browser, `#report` opens the form directly
+(`https://shizi-dev.realxco.com/assessment/#report`), like `#diagnostics` does for diagnostics.
+
+Every report carries context the parent never types: `appEnv` (`prod`/`dev`), `buildId` (the short
+git SHA — see `VITE_BUILD_ID` in the release procedure above), `userAgent`, `standalone`, `online`
+at the time of writing, and the most recent session id and module/activity recorded on that device.
+
+**Reading them** is a committed file, so `git pull`, then:
+
+```
+jq -c '{createdAt, kind, message, build: .context.buildId, env: .context.appEnv}' data/events/issue-reports.jsonl
+jq -c 'select(.kind == "bug") | {createdAt, message, build: .context.buildId, session: .context.lastSessionId, activity: .context.lastActivity}' data/events/issue-reports.jsonl
+```
+
+Reports are append-only, like everything else in `data/events/`: there is no "resolved" flag in the
+file — resolution lives in commits and PRs. Dev's reports are as disposable as dev's events:
+`pull-events.ts` refuses to write them to `data/events/` from a dev store without `--out-dir`. To
+look at what a dev verification session filed, export inside the dev container instead:
+
+```
+docker exec shizi-sync-dev npx tsx scripts/pull-events.ts --out-dir /tmp/dev-export
+docker exec shizi-sync-dev cat /tmp/dev-export/issue-reports.jsonl
+```

@@ -13,6 +13,13 @@ import type { CheckResult, DiagnosticsReport, HumanVerdict } from "./types.js";
 
 export interface DiagnosticsScreenProps {
   onExit: () => void;
+  /** add-issue-reporting: renders the "Report a problem or idea" button
+   * only when provided — opt-in by prop, the same pattern as
+   * `AudioUnlockGate`'s `onDiagnosticsRequest`. This screen is the one
+   * adult-facing hub reachable at every cold start (via the unlock
+   * screen's corner long-press), which is what makes the report form
+   * reachable at all from standalone mode. */
+  onOpenReport?: () => void;
 }
 
 const INITIAL_REPORT: DiagnosticsReport = {
@@ -72,7 +79,11 @@ function CheckRow({
  * not only at the end: `vite.config.ts`'s `registerType: "autoUpdate"`
  * means a service-worker update could reload the page mid-run.
  */
-export function DiagnosticsScreen({ onExit }: DiagnosticsScreenProps) {
+export function DiagnosticsScreen({ onExit, onOpenReport }: DiagnosticsScreenProps) {
+  // add-issue-reporting: the same value stamped into every issue report
+  // (see issues/issue-context.ts) — printed here so a parent can read
+  // back which build they're on when filing one.
+  const buildId = (import.meta.env.VITE_BUILD_ID as string | undefined) || "unknown";
   const [report, setReport] = useState<DiagnosticsReport>(() => loadStoredReport() ?? INITIAL_REPORT);
   const [persistResult, setPersistResult] = useState<CheckResult | null>(null);
 
@@ -218,9 +229,17 @@ export function DiagnosticsScreen({ onExit }: DiagnosticsScreenProps) {
     <div style={{ fontFamily: DIAGNOSTICS_FONT_FAMILY, padding: "1rem", maxWidth: "640px", margin: "0 auto" }}>
       <EnvBadge />
       <h1 style={{ fontSize: "1.1rem" }}>Diagnostics (task 10.0 pre-flight)</h1>
+      {onOpenReport && (
+        <p>
+          <button type="button" onClick={onOpenReport}>
+            Report a problem or idea
+          </button>
+        </p>
+      )}
       <p style={{ fontSize: "0.85rem" }}>
         standalone={String(report.context.standalone)} online={String(report.context.online)}
         {report.context.legacyIosStandalone !== undefined && ` navigator.standalone=${report.context.legacyIosStandalone}`}
+        {` build=${buildId}`}
       </p>
       <p style={{ fontSize: "0.85rem" }}>
         {summarize(report.checks).ok} ok, {summarize(report.checks).attention} attention,{" "}

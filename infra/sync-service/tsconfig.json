@@ -13,6 +13,7 @@
     { "path": "../../packages/assessment-engine" },
     { "path": "../../packages/character-data" },
     { "path": "../../packages/curriculum" },
+    { "path": "../../packages/issue-reports" },
     { "path": "../../packages/learner-state" }
   ]
 }

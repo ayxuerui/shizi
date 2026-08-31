@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { AudioUnlockGate } from "./audio/AudioUnlockGate.js";
 import { DiagnosticsScreen } from "./diagnostics/DiagnosticsScreen.js";
-import { clearDiagnosticsHash, isDiagnosticsRequested } from "./diagnostics/entry.js";
+import { clearParentScreenHash, requestedParentScreen, type ParentScreen } from "./diagnostics/entry.js";
+import { IssueReportScreen } from "./issues/IssueReportScreen.js";
 import { PracticeRouter } from "./session/PracticeRouter.js";
 import { loadPublishedConfig, type PublishedConfigResult } from "./session/published-config.js";
 
@@ -14,7 +15,11 @@ import { loadPublishedConfig, type PublishedConfigResult } from "./session/publi
  */
 export function App() {
   const [published, setPublished] = useState<PublishedConfigResult | null>(null);
-  const [diagnosticsOpen, setDiagnosticsOpen] = useState(() => isDiagnosticsRequested(window.location));
+  // add-issue-reporting: EITHER of two adult-facing screens, OR the child's
+  // tree — never more than one at a time (see the either/or note below).
+  const [parentScreen, setParentScreen] = useState<ParentScreen | null>(() =>
+    requestedParentScreen(window.location),
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -27,25 +32,33 @@ export function App() {
   }, []);
 
   // This is the app's ONLY URL read (see diagnostics/entry.ts's header
-  // comment) — a #diagnostics hash is a dev/desk-testing convenience in
-  // ordinary Safari; the corner long-press (AudioUnlockGate's
+  // comment) — a #diagnostics / #report hash is a dev/desk-testing
+  // convenience in ordinary Safari; the corner long-press (AudioUnlockGate's
   // onDiagnosticsRequest below) is the mechanism that also works inside
-  // standalone/home-screen mode, where there's no address bar.
+  // standalone/home-screen mode, where there's no address bar — and the
+  // diagnostics screen's own button is how the report form is reached
+  // from there.
   useEffect(() => {
-    const onHashChange = (): void => setDiagnosticsOpen(isDiagnosticsRequested(window.location));
+    const onHashChange = (): void => setParentScreen(requestedParentScreen(window.location));
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
-  if (diagnosticsOpen) {
-    return (
-      <DiagnosticsScreen
-        onExit={() => {
-          clearDiagnosticsHash(window);
-          setDiagnosticsOpen(false);
-        }}
-      />
-    );
+  const exitParentScreen = (): void => {
+    clearParentScreenHash(window);
+    setParentScreen(null);
+  };
+
+  // Either/or, never both: an adult-facing screen replaces the child's
+  // whole tree, which is what keeps BoutScreen.test.tsx's
+  // assertNoScoreLikeText guarantee structural — neither screen's digits
+  // can ever be in the DOM alongside a bout.
+  if (parentScreen === "report") {
+    return <IssueReportScreen onExit={exitParentScreen} />;
+  }
+
+  if (parentScreen === "diagnostics") {
+    return <DiagnosticsScreen onExit={exitParentScreen} onOpenReport={() => setParentScreen("report")} />;
   }
 
   if (!published) {
@@ -56,7 +69,7 @@ export function App() {
   }
 
   return (
-    <AudioUnlockGate onDiagnosticsRequest={() => setDiagnosticsOpen(true)}>
+    <AudioUnlockGate onDiagnosticsRequest={() => setParentScreen("diagnostics")}>
       <PracticeRouter pool={published.pool} assessmentConfig={published.config} />
     </AudioUnlockGate>
   );

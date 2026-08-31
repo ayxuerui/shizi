@@ -1,18 +1,27 @@
 import { exportToJsonl, toJsonl } from "@shizi/learner-state";
 import type { ArmAssignment, SessionRating } from "@shizi/adaptivity";
+import type { IssueReport } from "@shizi/issue-reports";
 import { getSyncConfig } from "./endpoint.js";
 import {
   listPendingAssignments,
   listPendingEvents,
+  listPendingIssueReports,
   listPendingRatings,
   markAssignmentsSynced,
   markEventsSynced,
+  markIssueReportsSynced,
   markRatingsSynced,
 } from "./event-queue.js";
 
 export type FlushResult =
   | { status: "skipped"; reason: string }
-  | { status: "flushed"; eventsCount: number; assignmentsCount: number; ratingsCount: number }
+  | {
+      status: "flushed";
+      eventsCount: number;
+      assignmentsCount: number;
+      ratingsCount: number;
+      issueReportsCount: number;
+    }
   | { status: "failed"; reason: string };
 
 export interface FlushDeps {
@@ -26,6 +35,10 @@ function serializeAssignments(assignments: readonly ArmAssignment[]): string {
 
 function serializeRatings(ratings: readonly SessionRating[]): string {
   return toJsonl(ratings);
+}
+
+function serializeIssueReports(reports: readonly IssueReport[]): string {
+  return toJsonl(reports);
 }
 
 async function postNdjson(
@@ -45,10 +58,11 @@ async function postNdjson(
 }
 
 /**
- * Opportunistic flush of the local outbox (events, assignments, AND
- * session ratings — task 9.2's sync-service exposes /events,
- * /assignments, and /ratings as three sibling routes, `config.endpoint`
- * is their shared base URL) to the self-hosted sync endpoint (design.md:
+ * Opportunistic flush of the local outbox (events, assignments, session
+ * ratings, AND issue reports — task 9.2's sync-service exposes /events,
+ * /assignments, /ratings, and add-issue-reporting's /issue-reports as
+ * four sibling routes, `config.endpoint` is their shared base URL) to
+ * the self-hosted sync endpoint (design.md:
  * Cloudflare Pages/Worker/D1 → self-hosted, see that decision entry).
  * Per `assessment` spec's "Full offline operation" requirement — NEVER
  * throws. Any failure (no endpoint configured, offline, non-2xx
@@ -69,13 +83,19 @@ export async function flushQueue(deps: FlushDeps = {}): Promise<FlushResult> {
   }
 
   try {
-    const [pendingEvents, pendingAssignments, pendingRatings] = await Promise.all([
+    const [pendingEvents, pendingAssignments, pendingRatings, pendingIssueReports] = await Promise.all([
       listPendingEvents(),
       listPendingAssignments(),
       listPendingRatings(),
+      listPendingIssueReports(),
     ]);
 
-    if (pendingEvents.length === 0 && pendingAssignments.length === 0 && pendingRatings.length === 0) {
+    if (
+      pendingEvents.length === 0 &&
+      pendingAssignments.length === 0 &&
+      pendingRatings.length === 0 &&
+      pendingIssueReports.length === 0
+    ) {
       return { status: "skipped", reason: "nothing pending" };
     }
 
@@ -112,11 +132,27 @@ export async function flushQueue(deps: FlushDeps = {}): Promise<FlushResult> {
       await markRatingsSynced(pendingRatings.map((rating) => rating.sessionId));
     }
 
+    // Fourth leg, after ratings — same short-circuit discipline as the
+    // legs above: an earlier failure leaves this one for the next attempt
+    // (add-issue-reporting design.md, "Outbox and flush follow the
+    // ratings pattern exactly").
+    if (pendingIssueReports.length > 0) {
+      const response = await postNdjson(
+        fetchImpl,
+        `${config.endpoint}/issue-reports`,
+        config.token,
+        serializeIssueReports(pendingIssueReports),
+      );
+      if (!response.ok) return { status: "failed", reason: `issue-reports HTTP ${response.status}` };
+      await markIssueReportsSynced(pendingIssueReports.map((report) => report.id));
+    }
+
     return {
       status: "flushed",
       eventsCount: pendingEvents.length,
       assignmentsCount: pendingAssignments.length,
       ratingsCount: pendingRatings.length,
+      issueReportsCount: pendingIssueReports.length,
     };
   } catch (error) {
     return { status: "failed", reason: error instanceof Error ? error.message : String(error) };

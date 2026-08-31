@@ -4,6 +4,7 @@ import { openEventStore } from "./db.js";
 import {
   handleAssignmentsSync,
   handleEventsSync,
+  handleIssueReportsSync,
   handleRatingsSync,
   type SyncRequestInput,
   type SyncDeps,
@@ -30,6 +31,7 @@ const ROUTES: Record<string, (input: SyncRequestInput, deps: SyncDeps) => SyncRe
   "/events": handleEventsSync,
   "/assignments": handleAssignmentsSync,
   "/ratings": handleRatingsSync,
+  "/issue-reports": handleIssueReportsSync,
 };
 
 async function readBody(req: IncomingMessage): Promise<string> {

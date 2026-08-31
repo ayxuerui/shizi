@@ -63,6 +63,54 @@ describe("App (task 8.3: first-gesture audio-unlock screen; task 9.4: published-
     window.location.hash = "";
   });
 
+  describe("add-issue-reporting: report-form containment (issue-reporting spec: 'The report form never enters the child-facing activity')", () => {
+    afterEach(() => {
+      window.location.hash = "";
+    });
+
+    it("shows the report form instead of the unlock gate when #report is set, and exiting clears the fragment and returns to the unlock screen", async () => {
+      window.location.hash = "#report";
+      render(<App />);
+      expect(await screen.findByRole("heading", { name: "Report a problem or idea" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "点一下开始" })).not.toBeInTheDocument();
+
+      act(() => {
+        screen.getByRole("button", { name: "Back" }).click();
+      });
+
+      expect(await screen.findByRole("button", { name: "点一下开始" })).toBeInTheDocument();
+      expect(window.location.hash).toBe("");
+      expect(screen.queryByRole("heading", { name: "Report a problem or idea" })).not.toBeInTheDocument();
+    });
+
+    it("reaches the report form from the diagnostics screen's button", async () => {
+      window.location.hash = "#diagnostics";
+      render(<App />);
+      const open = await screen.findByRole("button", { name: "Report a problem or idea" });
+
+      act(() => {
+        open.click();
+      });
+
+      expect(await screen.findByRole("heading", { name: "Report a problem or idea" })).toBeInTheDocument();
+      expect(screen.queryByText(/Diagnostics \(task 10.0/)).not.toBeInTheDocument();
+    });
+
+    it("renders no report control on the unlock screen, and no report text inside the child-facing tree after unlock", async () => {
+      render(<App />);
+      const unlockButton = await screen.findByRole("button", { name: "点一下开始" });
+      expect(screen.queryByRole("button", { name: /report/i })).not.toBeInTheDocument();
+
+      tap(unlockButton);
+      await screen.findByTestId("wukong");
+
+      const text = document.body.textContent ?? "";
+      expect(text).not.toContain("Report");
+      expect(text).not.toContain("Save report");
+      expect(screen.queryByRole("button", { name: /report/i })).not.toBeInTheDocument();
+    });
+  });
+
   describe("add-dev-deployment: EnvBadge containment (specs/deployment/spec.md: 'Deployed builds declare their environment')", () => {
     afterEach(() => {
       vi.unstubAllEnvs();
