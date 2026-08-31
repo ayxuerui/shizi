@@ -19,6 +19,7 @@
     "@shizi/assessment-engine": "*",
     "@shizi/character-data": "*",
     "@shizi/curriculum": "*",
+    "@shizi/issue-reports": "*",
     "@shizi/learner-state": "*",
     "better-sqlite3": "^13.0.3"
   },

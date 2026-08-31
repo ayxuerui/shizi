@@ -1,5 +1,6 @@
 import { validateEvent, type LearnerEvent } from "@shizi/learner-state";
 import { validateSessionRating, type ArmAssignment, type SessionRating } from "@shizi/adaptivity";
+import { validateIssueReport, type IssueReport } from "@shizi/issue-reports";
 import { checkAuth } from "./auth.js";
 import type { EventStore } from "./db.js";
 
@@ -145,6 +146,50 @@ export function handleRatingsSync(input: SyncRequestInput, deps: SyncDeps): Sync
       continue;
     }
     const { inserted: wasInserted } = deps.store.insertRating(candidate as SessionRating);
+    if (wasInserted) inserted += 1;
+    else duplicates += 1;
+  }
+
+  return {
+    status: 200,
+    body: { inserted, duplicates, rejected, ...(errors.length > 0 ? { errors } : {}) },
+  };
+}
+
+/**
+ * `issue-reporting` spec's "The sync endpoint accepts reports under the
+ * existing authorization and validation discipline". Structurally
+ * identical to `handleRatingsSync`, and for the same reason it reuses
+ * `validateIssueReport` from `@shizi/issue-reports` rather than a local
+ * structural guard: it's the validator the client already ran before
+ * storing the report locally, so a report accepted on the device can't
+ * be rejected here for a schema reason ("Same validation on both ends").
+ */
+export function handleIssueReportsSync(input: SyncRequestInput, deps: SyncDeps): SyncResponseResult {
+  if (!checkAuth(input.authHeader, deps.expectedToken)) {
+    return { status: 401, body: { error: "unauthorized" } };
+  }
+
+  let candidates: unknown[];
+  try {
+    candidates = parseNdjson(input.bodyText);
+  } catch {
+    return { status: 400, body: { error: "malformed NDJSON body" } };
+  }
+
+  let inserted = 0;
+  let duplicates = 0;
+  let rejected = 0;
+  const errors: string[] = [];
+
+  for (const candidate of candidates) {
+    const result = validateIssueReport(candidate);
+    if (!result.valid) {
+      rejected += 1;
+      errors.push(...result.errors);
+      continue;
+    }
+    const { inserted: wasInserted } = deps.store.insertIssueReport(candidate as IssueReport);
     if (wasInserted) inserted += 1;
     else duplicates += 1;
   }

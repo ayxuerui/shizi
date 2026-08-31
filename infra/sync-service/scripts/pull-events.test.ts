@@ -13,6 +13,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { LearnerEvent } from "@shizi/learner-state";
+import type { IssueReport } from "@shizi/issue-reports";
 import { openEventStore, type EventStore } from "../src/db.js";
 import { CanonicalRecordGuardError, pullEvents, resolveOutDir } from "./pull-events.js";
 
@@ -66,6 +67,26 @@ function makeEvent(overrides: Partial<LearnerEvent> = {}): LearnerEvent {
     daysSinceLastExposure: null,
     timeOfDay: 9,
     adultPresent: true,
+    ...overrides,
+  };
+}
+
+
+function makeIssueReport(overrides: Partial<IssueReport> = {}): IssueReport {
+  return {
+    id: "report-1",
+    kind: "bug",
+    message: "The audio did not play for 山.",
+    createdAt: "2026-08-29T10:00:00.000Z",
+    context: {
+      appEnv: "prod",
+      buildId: "abc1234",
+      userAgent: "Mozilla/5.0 (iPad)",
+      standalone: true,
+      online: false,
+      lastSessionId: null,
+      lastActivity: null,
+    },
     ...overrides,
   };
 }
@@ -139,6 +160,9 @@ describe("pullEvents (add-dev-deployment) — the guard end to end, against a re
     expect(() => pullEvents({ dbPath, requestedOutDir: undefined, shiziEnv: "dev" })).toThrow(
       CanonicalRecordGuardError,
     );
+    // add-issue-reporting: the guard fires before ANY export file is
+    // written — issue-reports.jsonl included, exactly like events.jsonl.
+    expect(readdirSync(dir).filter((name) => name.endsWith(".jsonl"))).toEqual([]);
   });
 
   it("a dev store with an explicit --out-dir writes there and succeeds", () => {
@@ -149,6 +173,29 @@ describe("pullEvents (add-dev-deployment) — the guard end to end, against a re
     expect(result.eventsCount).toBe(1);
     expect(existsSync(join(outDir, "events.jsonl"))).toBe(true);
     expect(readFileSync(join(outDir, "events.jsonl"), "utf8")).toContain("evt-1");
+  });
+
+  it("add-issue-reporting: writes issue-reports.jsonl beside the other exports, one line per report", () => {
+    store.insertIssueReport(makeIssueReport({ id: "report-1" }));
+    store.insertIssueReport(makeIssueReport({ id: "report-2", kind: "feature", message: "trace again after the bout" }));
+    const outDir = join(dir, "dev-export");
+
+    const result = pullEvents({ dbPath, requestedOutDir: outDir, shiziEnv: "dev" });
+
+    expect(result.issueReportsCount).toBe(2);
+    const lines = readFileSync(join(outDir, "issue-reports.jsonl"), "utf8").trim().split("\n");
+    expect(lines).toHaveLength(2);
+    expect(JSON.parse(lines[0]!)).toEqual(makeIssueReport({ id: "report-1" }));
+    expect(JSON.parse(lines[1]!)).toMatchObject({ id: "report-2", kind: "feature" });
+  });
+
+  it("add-issue-reporting: an empty store still writes an empty issue-reports.jsonl, so the backup's git add never hits a missing path", () => {
+    const outDir = join(dir, "dev-export");
+    const result = pullEvents({ dbPath, requestedOutDir: outDir, shiziEnv: "dev" });
+
+    expect(result.issueReportsCount).toBe(0);
+    expect(existsSync(join(outDir, "issue-reports.jsonl"))).toBe(true);
+    expect(readFileSync(join(outDir, "issue-reports.jsonl"), "utf8")).toBe("");
   });
 
   it("a prod store with no --out-dir writes the canonical repo-root data/events path, exactly as before this change", () => {

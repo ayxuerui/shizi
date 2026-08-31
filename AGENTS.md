@@ -58,3 +58,10 @@ docker restart shizi-gateway-dev
   to its built-in pool on any failure. Don't treat it as a bug.
 - A fresh browser profile starts with the learn/exposure activity; completing
   activities advances the learn → assess rotation with no console errors.
+- `https://shizi-dev.realxco.com/assessment/#report` opens the adult-facing
+  bug-report/feature-request form (add-issue-reporting); on-device it is
+  reached from the diagnostics screen's "Report a problem or idea" button.
+  A report filed on dev must land in dev's own store — check with
+  `docker exec shizi-sync-dev npx tsx scripts/pull-events.ts --out-dir /tmp/dev-export`
+  then `docker exec shizi-sync-dev cat /tmp/dev-export/issue-reports.jsonl` —
+  and must never touch `data/events/` in this checkout.

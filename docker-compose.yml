@@ -74,6 +74,12 @@ services:
         # release procedure), not from a file baked into any image layer.
         VITE_SYNC_ENDPOINT: /assessment/sync
         VITE_SYNC_TOKEN: ${VITE_SYNC_TOKEN}
+        # add-issue-reporting: the short git SHA baked into the build so an
+        # issue report can say which build produced it. .dockerignore
+        # excludes .git/, so the image build can't read it itself — the
+        # release procedure exports it (infra/README.md). Omitted, reports
+        # say "unknown": valid, just less useful.
+        VITE_BUILD_ID: ${VITE_BUILD_ID:-unknown}
     image: shizi-gateway:latest
     container_name: shizi-gateway
     ports:

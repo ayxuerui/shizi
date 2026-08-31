@@ -1,5 +1,6 @@
 import { validateEvent, type LearnerEvent } from "@shizi/learner-state";
 import { validateSessionRating, type ArmAssignment, type SessionRating } from "@shizi/adaptivity";
+import { validateIssueReport, type IssueReport } from "@shizi/issue-reports";
 import { getDB } from "./db.js";
 
 /**
@@ -164,4 +165,53 @@ export async function loadPriorEvents(): Promise<LearnerEvent[]> {
     }
   }
   return events;
+}
+
+/**
+ * add-issue-reporting (`issue-reporting` spec: "Reports are written
+ * offline-first and synced idempotently"). Validates before every write,
+ * same discipline as `enqueueEvent`/`enqueueRating` — a malformed report
+ * reaching here would be a bug in the report form's own composition, not
+ * an expected external input.
+ */
+export async function enqueueIssueReport(report: IssueReport): Promise<void> {
+  const result = validateIssueReport(report);
+  if (!result.valid) {
+    console.error("event-queue: refusing to enqueue invalid issue report", result.errors, report);
+    return;
+  }
+  const db = await getDB();
+  await db.put("issueReports", { report, synced: false });
+}
+
+/** Follows the `ratings` (natural-key) pattern — `IssueReport.id` is the
+ * idempotency key on both ends. Re-validated on read, like every other
+ * store here. */
+export async function listPendingIssueReports(): Promise<IssueReport[]> {
+  const db = await getDB();
+  const all = await db.getAll("issueReports");
+  const pending: IssueReport[] = [];
+  for (const stored of all) {
+    if (stored.synced) continue;
+    const result = validateIssueReport(stored.report);
+    if (result.valid) {
+      pending.push(stored.report);
+    } else {
+      console.warn("event-queue: skipping invalid stored issue report on read", result.errors);
+    }
+  }
+  return pending;
+}
+
+export async function markIssueReportsSynced(ids: readonly string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const db = await getDB();
+  const tx = db.transaction("issueReports", "readwrite");
+  await Promise.all(
+    ids.map(async (id) => {
+      const existing = await tx.store.get(id);
+      if (existing) await tx.store.put({ ...existing, synced: true });
+    }),
+  );
+  await tx.done;
 }

@@ -60,6 +60,39 @@ describe("DiagnosticsScreen (task 10.0 pre-flight checklist, made evidence-based
     });
   });
 
+  describe("add-issue-reporting", () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it("prints build=unknown in the context line when no build id was stamped into the build", async () => {
+      render(<DiagnosticsScreen onExit={vi.fn()} />);
+      expect(await screen.findByText(/build=unknown/)).toBeInTheDocument();
+    });
+
+    it("prints the stamped build id when one is present", async () => {
+      vi.stubEnv("VITE_BUILD_ID", "abc1234");
+      render(<DiagnosticsScreen onExit={vi.fn()} />);
+      expect(await screen.findByText(/build=abc1234/)).toBeInTheDocument();
+    });
+
+    it("renders no report button without onOpenReport", async () => {
+      render(<DiagnosticsScreen onExit={vi.fn()} />);
+      await screen.findByText(/\(a\) zh-CN speech/);
+      expect(screen.queryByRole("button", { name: "Report a problem or idea" })).not.toBeInTheDocument();
+    });
+
+    it("renders the report button when onOpenReport is provided, and clicking it calls the callback", async () => {
+      const onOpenReport = vi.fn();
+      render(<DiagnosticsScreen onExit={vi.fn()} onOpenReport={onOpenReport} />);
+      const button = await screen.findByRole("button", { name: "Report a problem or idea" });
+
+      button.click();
+
+      expect(onOpenReport).toHaveBeenCalledOnce();
+    });
+  });
+
   it("contains no Chinese text anywhere — this screen is deliberately English/ASCII only", async () => {
     render(<DiagnosticsScreen onExit={vi.fn()} />);
     await screen.findByText(/\(a\) zh-CN speech/);

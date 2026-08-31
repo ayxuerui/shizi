@@ -6,6 +6,7 @@
     { "path": "./packages/validator" },
     { "path": "./packages/learner-state" },
     { "path": "./packages/adaptivity" },
+    { "path": "./packages/issue-reports" },
     { "path": "./packages/assessment-engine" },
     { "path": "./packages/exposure-engine" }
   ]

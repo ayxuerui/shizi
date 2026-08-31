@@ -1,6 +1,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { LearnerEvent } from "@shizi/learner-state";
 import type { ArmAssignment, SessionRating } from "@shizi/adaptivity";
+import type { IssueReport } from "@shizi/issue-reports";
 
 export interface StoredEvent {
   event: LearnerEvent;
@@ -14,6 +15,11 @@ export interface StoredAssignment {
 
 export interface StoredRating {
   rating: SessionRating;
+  synced: boolean;
+}
+
+export interface StoredIssueReport {
+  report: IssueReport;
   synced: boolean;
 }
 
@@ -40,10 +46,25 @@ interface ShiziDBSchema extends DBSchema {
     key: string;
     value: StoredRating;
   };
+  issueReports: {
+    // add-issue-reporting: IssueReport.id is client-generated
+    // (crypto.randomUUID()) and is the server's idempotency key too, so
+    // this follows the `events`/`ratings` natural-key pattern. The
+    // adult-facing report form's outbox — and, like every other store
+    // here, retained after sync rather than deleted (the deployment
+    // spec's client-retention backstop).
+    key: string;
+    value: StoredIssueReport;
+  };
 }
 
 const DB_NAME = "shizi-assessment";
-const DB_VERSION = 3;
+// v4 (add-issue-reporting): adds the `issueReports` store. Purely additive
+// — every existing store and row is kept. NOT downgradable: a device that
+// has opened v4 cannot run a build asking for v3 (`VersionError`) without
+// clearing site data, the same exposure the v2→v3 bump accepted; roll the
+// gateway forward, not back, once any device has opened this version.
+const DB_VERSION = 4;
 
 /**
  * v2→v3 row translation (`rename-event-modality-to-activity` design
@@ -98,10 +119,15 @@ export function getDB(): Promise<IDBPDatabase<ShiziDBSchema>> {
         if (!db.objectStoreNames.contains("ratings")) {
           db.createObjectStore("ratings", { keyPath: "rating.sessionId" });
         }
+        if (!db.objectStoreNames.contains("issueReports")) {
+          db.createObjectStore("issueReports", { keyPath: "report.id" });
+        }
         // v3 row normalization — purely additive (stores above are kept;
         // rows are rewritten in place), per the deployment spec's
         // client-retention backstop. Fresh databases have no rows yet, so
-        // the cursor walks are no-ops for them.
+        // the cursor walks are no-ops for them — and so is the v3→v4
+        // re-run on an already-translated database (no legacy `modality`
+        // rows remain to rewrite).
         void oldVersion;
         let cursor = await transaction.objectStore("events").openCursor();
         while (cursor) {

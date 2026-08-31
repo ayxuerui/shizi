@@ -30,6 +30,11 @@
 // path in this project (~/.config/shizi/, absolute, not ${HOME}-
 // expanded, for the same consistency reason).
 //
+// add-issue-reporting: also regenerates issue-reports.jsonl (bug reports
+// and feature requests filed from the app's adult-facing form) next to
+// events.jsonl and ratings.jsonl — a third canonical export file, subject
+// to the same dev-store guard above because it is the same function.
+//
 // Usage: npx tsx scripts/pull-events.ts [path-to-db] [--out-dir <dir>]
 //   (db path defaults to $EVENTS_DB_PATH, then the fixed host path)
 
@@ -94,6 +99,7 @@ export interface PullEventsResult {
   outDir: string;
   eventsCount: number;
   ratingsCount: number;
+  issueReportsCount: number;
 }
 
 /**
@@ -112,6 +118,7 @@ export function pullEvents({ dbPath, requestedOutDir, shiziEnv }: PullEventsOpti
   const store = openEventStore(dbPath);
   const events = store.getAllEvents();
   const ratings = store.getAllRatings();
+  const issueReports = store.getAllIssueReports();
   store.close();
 
   mkdirSync(outDir, { recursive: true });
@@ -127,7 +134,18 @@ export function pullEvents({ dbPath, requestedOutDir, shiziEnv }: PullEventsOpti
   const ratingsPath = join(outDir, "ratings.jsonl");
   writeFileSync(ratingsPath, toJsonl(ratings));
 
-  return { outDir, eventsCount: events.length, ratingsCount: ratings.length };
+  // issue-reporting spec's "Reports are exported and backed up with the
+  // learner record". Always written, even when empty, so backup-and-push's
+  // `git add` of this path never fails on a missing file.
+  const issueReportsPath = join(outDir, "issue-reports.jsonl");
+  writeFileSync(issueReportsPath, toJsonl(issueReports));
+
+  return {
+    outDir,
+    eventsCount: events.length,
+    ratingsCount: ratings.length,
+    issueReportsCount: issueReports.length,
+  };
 }
 
 function parseArgs(argv: string[]): { dbPathArg: string | undefined; outDirArg: string | undefined } {
@@ -158,6 +176,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const result = pullEvents({ dbPath, requestedOutDir: outDirArg, shiziEnv: process.env.SHIZI_ENV });
     console.log(`Wrote ${result.eventsCount} events to ${join(result.outDir, "events.jsonl")}`);
     console.log(`Wrote ${result.ratingsCount} ratings to ${join(result.outDir, "ratings.jsonl")}`);
+    console.log(`Wrote ${result.issueReportsCount} issue reports to ${join(result.outDir, "issue-reports.jsonl")}`);
     if (result.outDir === join(repoRoot, "data", "events")) {
       console.log("Remember to commit these files — they're the actual durable backup, not the live SQLite file.");
     } else {

@@ -34,8 +34,14 @@ RUN npm ci
 FROM deps AS build
 ARG VITE_SYNC_ENDPOINT
 ARG VITE_SYNC_TOKEN
+# add-issue-reporting: the short git SHA stamped into issue reports. Must
+# arrive as a build arg — .dockerignore excludes .git/, so
+# apps/assessment/vite.config.ts's own `git rev-parse` fallback can't run
+# in here. Defaults to "unknown" (a valid, just less useful, value).
+ARG VITE_BUILD_ID=unknown
 ENV VITE_SYNC_ENDPOINT=${VITE_SYNC_ENDPOINT}
 ENV VITE_SYNC_TOKEN=${VITE_SYNC_TOKEN}
+ENV VITE_BUILD_ID=${VITE_BUILD_ID}
 RUN npx tsc -b && npm run build --workspace=apps/assessment
 
 # ---- runtime stage: nginx serving the built app. The nginx template is

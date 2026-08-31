@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
@@ -12,6 +13,32 @@ import { VitePWA } from "vite-plugin-pwa";
 // prefixes later — see design.md's "single holding service" decision. `base`
 // must match that prefix exactly; dev/preview then also serve from
 // /assessment/, matching prod instead of diverging from it.
+/**
+ * add-issue-reporting: the build identifier stamped into every issue
+ * report (`issue-reporting` spec: "Reports carry diagnostic context
+ * automatically"). Three-step fallback, in this order:
+ *   1. an explicit VITE_BUILD_ID in the build environment — the only
+ *      route that works inside the gateway image build, because
+ *      .dockerignore excludes .git/ (docker-compose.yml passes it as a
+ *      build arg; infra/README.md's release procedure exports it);
+ *   2. `git rev-parse --short HEAD` — host builds (the documented dev
+ *      build command) get it for free, with no change to that command;
+ *   3. the literal "unknown" — still a valid report, just less useful.
+ */
+function resolveBuildId(): string {
+  const fromEnv = process.env.VITE_BUILD_ID;
+  if (fromEnv) return fromEnv;
+  try {
+    const sha = execFileSync("git", ["rev-parse", "--short", "HEAD"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return sha || "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
 export default defineConfig(({ mode }) => {
   // add-dev-deployment: VITE_APP_ENV, not Vite's own `mode`, is the
   // environment signal — `vite build --mode dev` still produces a
@@ -22,8 +49,15 @@ export default defineConfig(({ mode }) => {
   // loadEnv reads.
   const env = loadEnv(mode, process.cwd(), "VITE_");
   const isDev = env.VITE_APP_ENV === "dev";
+  const buildId = resolveBuildId();
   return {
     base: "/assessment/",
+    // `define`, not a mutation of process.env inside this function, so the
+    // value is set in exactly one place regardless of how Vite's own env
+    // loading orders things (see resolveBuildId above).
+    define: {
+      "import.meta.env.VITE_BUILD_ID": JSON.stringify(buildId),
+    },
     plugins: [
       react(),
       VitePWA({

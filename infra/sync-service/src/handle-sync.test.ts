@@ -3,10 +3,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { LearnerEvent } from "@shizi/learner-state";
-import { exportToJsonl } from "@shizi/learner-state";
+import { exportToJsonl, toJsonl } from "@shizi/learner-state";
 import type { ArmAssignment, SessionRating } from "@shizi/adaptivity";
+import { MAX_MESSAGE_LENGTH, type IssueReport } from "@shizi/issue-reports";
 import { openEventStore, type EventStore } from "./db.js";
-import { handleAssignmentsSync, handleEventsSync, handleRatingsSync } from "./handle-sync.js";
+import {
+  handleAssignmentsSync,
+  handleEventsSync,
+  handleIssueReportsSync,
+  handleRatingsSync,
+} from "./handle-sync.js";
 
 const TOKEN = "test-shared-token";
 
@@ -25,6 +31,26 @@ function makeEvent(overrides: Partial<LearnerEvent> = {}): LearnerEvent {
     daysSinceLastExposure: null,
     timeOfDay: 9,
     adultPresent: true,
+    ...overrides,
+  };
+}
+
+
+function makeIssueReport(overrides: Partial<IssueReport> = {}): IssueReport {
+  return {
+    id: "report-1",
+    kind: "bug",
+    message: "The audio did not play for 山.",
+    createdAt: "2026-08-29T10:00:00.000Z",
+    context: {
+      appEnv: "prod",
+      buildId: "abc1234",
+      userAgent: "Mozilla/5.0 (iPad)",
+      standalone: true,
+      online: false,
+      lastSessionId: null,
+      lastActivity: null,
+    },
     ...overrides,
   };
 }
@@ -227,5 +253,86 @@ describe("handleRatingsSync (task 9.2, adaptivity-instrumentation spec: 'Parent 
       { expectedToken: TOKEN, store },
     );
     expect(result.status).toBe(400);
+  });
+});
+
+describe("handleIssueReportsSync (add-issue-reporting, issue-reporting spec: 'The sync endpoint accepts reports under the existing authorization and validation discipline')", () => {
+  let dir: string;
+  let store: EventStore;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "shizi-handle-sync-reports-test-"));
+    store = openEventStore(join(dir, "events.sqlite"));
+  });
+
+  afterEach(() => {
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("rejects a request with no auth header, storing nothing", () => {
+    const result = handleIssueReportsSync(
+      { authHeader: null, bodyText: toJsonl([makeIssueReport()]) },
+      { expectedToken: TOKEN, store },
+    );
+    expect(result.status).toBe(401);
+    expect(store.getAllIssueReports()).toEqual([]);
+  });
+
+  it("rejects a request with the wrong token, storing nothing", () => {
+    const result = handleIssueReportsSync(
+      { authHeader: "Bearer wrong", bodyText: toJsonl([makeIssueReport()]) },
+      { expectedToken: TOKEN, store },
+    );
+    expect(result.status).toBe(401);
+    expect(store.getAllIssueReports()).toEqual([]);
+  });
+
+  it("rejects malformed NDJSON with a 400, not a 500 or a crash", () => {
+    const result = handleIssueReportsSync(
+      { authHeader: `Bearer ${TOKEN}`, bodyText: "not json at all {{{" },
+      { expectedToken: TOKEN, store },
+    );
+    expect(result.status).toBe(400);
+  });
+
+  it("accepts and inserts a valid two-report batch — the client's exact wire format (learner-state's toJsonl)", () => {
+    const reports = [makeIssueReport({ id: "report-1" }), makeIssueReport({ id: "report-2", kind: "feature" })];
+    const result = handleIssueReportsSync(
+      { authHeader: `Bearer ${TOKEN}`, bodyText: toJsonl(reports) },
+      { expectedToken: TOKEN, store },
+    );
+    expect(result).toMatchObject({ status: 200, body: { inserted: 2, duplicates: 0, rejected: 0 } });
+    expect(store.getAllIssueReports()).toEqual(reports);
+  });
+
+  it("is idempotent — re-posting the same batch counts as duplicates, not second inserts", () => {
+    const body = toJsonl([makeIssueReport({ id: "report-1" }), makeIssueReport({ id: "report-2" })]);
+    handleIssueReportsSync({ authHeader: `Bearer ${TOKEN}`, bodyText: body }, { expectedToken: TOKEN, store });
+
+    const second = handleIssueReportsSync(
+      { authHeader: `Bearer ${TOKEN}`, bodyText: body },
+      { expectedToken: TOKEN, store },
+    );
+    expect(second).toMatchObject({ status: 200, body: { inserted: 0, duplicates: 2, rejected: 0 } });
+    expect(store.getAllIssueReports()).toHaveLength(2);
+  });
+
+  it("rejects and counts malformed reports (defense in depth) without failing the valid ones in the same batch", () => {
+    const good = makeIssueReport({ id: "report-good" });
+    const unknownKind = { ...makeIssueReport({ id: "report-kind" }), kind: "question" };
+    const tooLong = makeIssueReport({ id: "report-long", message: "x".repeat(MAX_MESSAGE_LENGTH + 1) });
+    const body = [good, unknownKind, tooLong].map((r) => JSON.stringify(r)).join("\n") + "\n";
+
+    const result = handleIssueReportsSync(
+      { authHeader: `Bearer ${TOKEN}`, bodyText: body },
+      { expectedToken: TOKEN, store },
+    );
+
+    expect(result).toMatchObject({ status: 200, body: { inserted: 1, duplicates: 0, rejected: 2 } });
+    const errors = (result.body as { errors?: string[] }).errors ?? [];
+    expect(errors.some((e) => e.includes("kind must be one of"))).toBe(true);
+    expect(errors.some((e) => e.includes(`message must be at most ${MAX_MESSAGE_LENGTH}`))).toBe(true);
+    expect(store.getAllIssueReports().map((r) => r.id)).toEqual(["report-good"]);
   });
 });

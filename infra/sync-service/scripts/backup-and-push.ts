@@ -54,9 +54,9 @@ export class DirtyCloneError extends Error {
 /**
  * Pulled out so it's independently testable — mirrors pull-events.ts's
  * own "extract the decision logic, keep the entrypoint thin" split.
- * `git status --porcelain` with the three canonical files excluded via
- * pathspec magic (`:!path`) reports nothing at all when the clone is
- * otherwise clean.
+ * `git status --porcelain` with the canonical files (the three exports
+ * plus the run log) excluded via pathspec magic (`:!path`) reports
+ * nothing at all when the clone is otherwise clean.
  */
 export function assertCleanOutsideExport(repoRoot: string): void {
   const status = git(
@@ -67,6 +67,7 @@ export function assertCleanOutsideExport(repoRoot: string): void {
       ".",
       ":!data/events/events.jsonl",
       ":!data/events/ratings.jsonl",
+      ":!data/events/issue-reports.jsonl",
       ":!data/events/backup-log.txt",
     ],
     repoRoot,
@@ -113,6 +114,7 @@ export interface RunBackupOptions {
 export interface RunBackupResult {
   eventsCount: number;
   ratingsCount: number;
+  issueReportsCount: number;
   committedNewData: boolean;
 }
 
@@ -135,17 +137,34 @@ export function runBackup({ repoRoot, dbPath, now }: RunBackupOptions): RunBacku
   mkdirSync(eventsDir, { recursive: true });
   appendFileSync(
     join(eventsDir, "backup-log.txt"),
-    `${runAt} ran: ${result.eventsCount} events, ${result.ratingsCount} ratings\n`,
+    `${runAt} ran: ${result.eventsCount} events, ${result.ratingsCount} ratings, ${result.issueReportsCount} issue reports\n`,
   );
 
   git(
-    ["add", "data/events/events.jsonl", "data/events/ratings.jsonl", "data/events/backup-log.txt"],
+    [
+      "add",
+      "data/events/events.jsonl",
+      "data/events/ratings.jsonl",
+      "data/events/issue-reports.jsonl",
+      "data/events/backup-log.txt",
+    ],
     repoRoot,
   );
 
   let dataChanged: boolean;
   try {
-    git(["diff", "--cached", "--quiet", "--", "data/events/events.jsonl", "data/events/ratings.jsonl"], repoRoot);
+    git(
+      [
+        "diff",
+        "--cached",
+        "--quiet",
+        "--",
+        "data/events/events.jsonl",
+        "data/events/ratings.jsonl",
+        "data/events/issue-reports.jsonl",
+      ],
+      repoRoot,
+    );
     dataChanged = false;
   } catch {
     dataChanged = true;
@@ -161,7 +180,12 @@ export function runBackup({ repoRoot, dbPath, now }: RunBackupOptions): RunBacku
     git(["commit", "-m", `chore: backup ran, no new events (${runAt})`, "--", "data/events/backup-log.txt"], repoRoot);
   }
 
-  return { eventsCount: result.eventsCount, ratingsCount: result.ratingsCount, committedNewData: dataChanged };
+  return {
+    eventsCount: result.eventsCount,
+    ratingsCount: result.ratingsCount,
+    issueReportsCount: result.issueReportsCount,
+    committedNewData: dataChanged,
+  };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -172,7 +196,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const result = runBackup({ repoRoot: DEFAULT_REPO_ROOT, dbPath, now: () => new Date().toISOString() });
     console.log(
       `Backup ${result.committedNewData ? "committed new data" : "ran, nothing new"}: ` +
-        `${result.eventsCount} events, ${result.ratingsCount} ratings.`,
+        `${result.eventsCount} events, ${result.ratingsCount} ratings, ${result.issueReportsCount} issue reports.`,
     );
     if (!noPush) {
       rebaseThenPush(DEFAULT_REPO_ROOT);
